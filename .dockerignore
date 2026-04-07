@@ -1,6 +1,5 @@
 node_modules
 .git
-auth
 database/database.json
 database/database.backup.json
 rpg/data/playerPets.json
