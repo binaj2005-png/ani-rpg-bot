@@ -11,36 +11,58 @@ const Announcer = require('../../rpg/utils/Announcer');
 // SPAWN CATALOG — what can drop
 // ═══════════════════════════════════════════════════════════════
 const SPAWN_ARTIFACTS = [
-  // Weapons
-  { name: "Dragonslayer's Edge",    emoji: '🗡️', rarity: 'legendary', type: 'weapon', bonus: { atk: 180, crit: 25 },  desc: 'Forged from the fang of the first dragon. Every strike carries ancient fury.' },
+  // ── COMMON (drops most often) ──────────────────────────────
+  { name: 'Iron Sword',             emoji: '⚔️',  rarity: 'common',   type: 'weapon', bonus: { atk: 15 },              desc: 'A reliable blade. Not fancy, but it gets the job done.' },
+  { name: 'Wooden Shield',          emoji: '🛡️',  rarity: 'common',   type: 'armor',  bonus: { def: 12 },              desc: 'Rough around the edges, but it has saved lives.' },
+  { name: 'Leather Boots',          emoji: '👢',  rarity: 'common',   type: 'armor',  bonus: { def: 8, speed: 5 },     desc: 'Light and worn. Good for running away.' },
+  { name: 'Copper Ring',            emoji: '💍',  rarity: 'common',   type: 'ring',   bonus: { hp: 80 },               desc: 'Simple and plain. But there is warmth in it.' },
+  { name: 'Herb Pouch',             emoji: '🌿',  rarity: 'common',   type: 'tome',   bonus: { hp: 60, energy: 20 },   desc: 'Dried herbs tied with twine. A traveller\'s best friend.' },
+  { name: 'Rusty Dagger',           emoji: '🗡️',  rarity: 'common',   type: 'weapon', bonus: { atk: 12, crit: 5 },    desc: 'Old and chipped. Still bites.' },
+  { name: 'Cloth Robe',             emoji: '👘',  rarity: 'common',   type: 'armor',  bonus: { def: 10, energy: 15 },  desc: 'Thin and simple. Mages swear by it.' },
+  { name: 'Stone Amulet',           emoji: '📿',  rarity: 'common',   type: 'ring',   bonus: { def: 10, hp: 50 },      desc: 'A carved stone worn around the neck. Said to ward off evil.' },
+
+  // ── RARE (occasional drop) ────────────────────────────────
+  { name: 'Silver Bow',             emoji: '🏹',  rarity: 'rare',     type: 'weapon', bonus: { atk: 50, crit: 10 },   desc: 'Crafted by elven smiths. Accurate and swift.' },
+  { name: 'Knight\'s Pauldrons',    emoji: '🦺',  rarity: 'rare',     type: 'armor',  bonus: { def: 55, hp: 150 },    desc: 'Shoulder guards of a fallen knight. Still holds its shape.' },
+  { name: 'Mage\'s Tome',           emoji: '📘',  rarity: 'rare',     type: 'tome',   bonus: { atk: 45, energy: 60 }, desc: 'Filled with half-decoded spells. Powerful if you can read it.' },
+  { name: 'Hunter\'s Ring',         emoji: '💍',  rarity: 'rare',     type: 'ring',   bonus: { atk: 30, crit: 15 },   desc: 'Worn by veteran hunters. Sharpens the killer instinct.' },
+  { name: 'Steel Gauntlets',        emoji: '🥊',  rarity: 'rare',     type: 'armor',  bonus: { def: 45, atk: 20 },    desc: 'Heavy fists of steel. Your punch lands differently.' },
+  { name: 'Wind Blade',             emoji: '💨',  rarity: 'rare',     type: 'weapon', bonus: { atk: 55, speed: 20 },  desc: 'Light as air. Faster than thought.' },
+  { name: 'Jade Pendant',           emoji: '🟢',  rarity: 'rare',     type: 'ring',   bonus: { hp: 250, def: 20 },    desc: 'Warm green stone. Healers prize it above most things.' },
+
+  // ── EPIC (uncommon drop) ──────────────────────────────────
   { name: 'Void Cleaver',           emoji: '⚫', rarity: 'epic',      type: 'weapon', bonus: { atk: 140, pen: 20 },    desc: 'A blade that cuts through reality itself. Armor is meaningless to it.' },
-  { name: 'Stormcaller Staff',      emoji: '⚡', rarity: 'legendary', type: 'weapon', bonus: { atk: 160, speed: 30 },  desc: 'Crackles with endless lightning. Calls storms from clear skies.' },
   { name: 'Shadow Fang',            emoji: '🌑', rarity: 'epic',      type: 'weapon', bonus: { atk: 130, evade: 15 },  desc: 'A dagger that moves through shadows. You see it only when it is too late.' },
-  { name: 'Titan Maul',             emoji: '🔨', rarity: 'legendary', type: 'weapon', bonus: { atk: 200, def: -20 },   desc: 'So heavy it bends the earth. One hit ends fights.' },
-  { name: 'Celestial Bow',          emoji: '🏹', rarity: 'legendary', type: 'weapon', bonus: { atk: 170, crit: 30 },   desc: 'Arrows of starlight. They never miss.' },
   { name: 'Phoenix Wand',           emoji: '🔥', rarity: 'epic',      type: 'weapon', bonus: { atk: 145, hp: 500 },    desc: 'Channels rebirth energy. User regenerates between battles.' },
-  // Armor
-  { name: 'Dragon Scale Mail',      emoji: '🐉', rarity: 'legendary', type: 'armor',  bonus: { def: 200, hp: 800 },    desc: 'Shed scales of the Dragon Emperor. Nothing can pierce it cleanly.' },
   { name: 'Shadow Shroud',          emoji: '🌑', rarity: 'epic',      type: 'armor',  bonus: { def: 150, evade: 25 },  desc: 'Absorbs light itself. Enemies struggle to target you.' },
-  { name: 'Titan Plate',            emoji: '⛰️', rarity: 'legendary', type: 'armor',  bonus: { def: 240, hp: 600 },    desc: 'Carved from the hide of a mountain titan. Impenetrable.' },
   { name: 'Celestial Robe',         emoji: '✨', rarity: 'epic',      type: 'armor',  bonus: { def: 120, atk: 80 },    desc: 'Woven from starlight. Provides both power and protection.' },
-  { name: 'Void Carapace',          emoji: '🕳️', rarity: 'legendary', type: 'armor',  bonus: { def: 220, nullify: 1 }, desc: 'Absorbs one hit completely per battle. The void protects.' },
-  // Accessories
-  { name: 'Ring of the Eternal',    emoji: '💍', rarity: 'legendary', type: 'ring',   bonus: { hp: 1200, regen: 1 },   desc: 'Worn by immortals. The wearer does not bleed out — they persist.' },
   { name: 'Amulet of Catastrophe',  emoji: '🔮', rarity: 'epic',      type: 'ring',   bonus: { atk: 100, crit: 40 },   desc: 'Amplifies destructive energy. Every crit is catastrophic.' },
   { name: "Berserker's Pendant",    emoji: '🩸', rarity: 'epic',      type: 'ring',   bonus: { atk: 160, def: -30 },   desc: 'The more you bleed, the stronger you get. Pain is power.' },
-  { name: 'Crown of the Void King', emoji: '👑', rarity: 'mythic',    type: 'ring',   bonus: { atk: 200, def: 100, hp: 1000 }, desc: 'The crown of a conquered dimension. Its weight is crushing. Its power is absolute.' },
-  // Tomes / Trinkets
+  { name: 'Crystal of Pure Power',  emoji: '💎', rarity: 'epic',      type: 'tome',   bonus: { atk: 120, energy: 100 }, desc: 'A crystallized mana core. Spells cost less and hit harder.' },
+
+  // ── LEGENDARY (very rare drop) ────────────────────────────
+  { name: "Dragonslayer's Edge",    emoji: '🗡️', rarity: 'legendary', type: 'weapon', bonus: { atk: 180, crit: 25 },  desc: 'Forged from the fang of the first dragon. Every strike carries ancient fury.' },
+  { name: 'Stormcaller Staff',      emoji: '⚡', rarity: 'legendary', type: 'weapon', bonus: { atk: 160, speed: 30 },  desc: 'Crackles with endless lightning. Calls storms from clear skies.' },
+  { name: 'Titan Maul',             emoji: '🔨', rarity: 'legendary', type: 'weapon', bonus: { atk: 200, def: -20 },   desc: 'So heavy it bends the earth. One hit ends fights.' },
+  { name: 'Celestial Bow',          emoji: '🏹', rarity: 'legendary', type: 'weapon', bonus: { atk: 170, crit: 30 },   desc: 'Arrows of starlight. They never miss.' },
+  { name: 'Dragon Scale Mail',      emoji: '🐉', rarity: 'legendary', type: 'armor',  bonus: { def: 200, hp: 800 },    desc: 'Shed scales of the Dragon Emperor. Nothing can pierce it cleanly.' },
+  { name: 'Titan Plate',            emoji: '⛰️', rarity: 'legendary', type: 'armor',  bonus: { def: 240, hp: 600 },    desc: 'Carved from the hide of a mountain titan. Impenetrable.' },
+  { name: 'Void Carapace',          emoji: '🕳️', rarity: 'legendary', type: 'armor',  bonus: { def: 220, nullify: 1 }, desc: 'Absorbs one hit completely per battle. The void protects.' },
+  { name: 'Ring of the Eternal',    emoji: '💍', rarity: 'legendary', type: 'ring',   bonus: { hp: 1200, regen: 1 },   desc: 'Worn by immortals. The wearer does not bleed out — they persist.' },
   { name: 'Grimoire of Ruin',       emoji: '📕', rarity: 'legendary', type: 'tome',   bonus: { atk: 150, skillDmg: 30 }, desc: 'A spellbook written in blood. Every spell causes more destruction.' },
-  { name: 'Crystal of Pure Power',  emoji: '💎', rarity: 'epic',      type: 'tome',   bonus: { atk: 120, energy: 100 },  desc: 'A crystallized mana core. Spells cost less and hit harder.' },
+
+  // ── MYTHIC (extremely rare — once in a blue moon) ─────────
+  { name: 'Crown of the Void King', emoji: '👑', rarity: 'mythic',    type: 'ring',   bonus: { atk: 200, def: 100, hp: 1000 }, desc: 'The crown of a conquered dimension. Its weight is crushing. Its power is absolute.' },
   { name: 'Soul Stone',             emoji: '🌀', rarity: 'mythic',    type: 'tome',   bonus: { atk: 180, crit: 50, hp: 500 }, desc: 'Contains a trapped god. Its power cannot be measured.' },
 ];
 
 // ─── RARITY ANNOUNCEMENT STYLES ──────────────────────────────
 const RARITY_STYLES = {
-  epic:      { color: '🟣', stars: '⭐⭐⭐',    header: '💫 EPIC ARTIFACT APPEARS!',      urgency: '⚡ First to /claim wins!' },
-  legendary: { color: '🟠', stars: '⭐⭐⭐⭐⭐', header: '🔥 LEGENDARY ARTIFACT APPEARS!', urgency: '🔥 Rush! /claim NOW!' },
-  mythic:    { color: '🔴', stars: '✨✨✨✨✨✨', header: '☄️ MYTHIC ARTIFACT APPEARS!!!',  urgency: '☄️ ONCE IN A GENERATION! /claim IMMEDIATELY!' },
+  common:    { color: '⚪', stars: '⭐',           header: '📦 AN ITEM APPEARS!',             urgency: '👆 First to /claim wins!' },
+  rare:      { color: '🔵', stars: '⭐⭐⭐',        header: '💙 RARE ITEM APPEARS!',           urgency: '⚡ First to /claim wins!' },
+  epic:      { color: '🟣', stars: '⭐⭐⭐⭐',      header: '💫 EPIC ARTIFACT APPEARS!',       urgency: '⚡ First to /claim wins!' },
+  legendary: { color: '🟠', stars: '⭐⭐⭐⭐⭐',    header: '🔥 LEGENDARY ARTIFACT APPEARS!',  urgency: '🔥 Rush! /claim NOW!' },
+  mythic:    { color: '🔴', stars: '✨✨✨✨✨✨',   header: '☄️ MYTHIC ARTIFACT APPEARS!!!',   urgency: '☄️ ONCE IN A GENERATION! /claim IMMEDIATELY!' },
 };
 
 // ─── FLAVOUR LINES ─────────────────────────────────────────────
@@ -71,12 +93,15 @@ async function spawnArtifact(sock, chatId, db, saveDatabase, forcedArtifact) {
   if (forcedArtifact) {
     artifact = forcedArtifact;
   } else {
-    // Weight toward epic, rare chance at mythic
-    const roll = Math.random();
+    // Realistic rarity weights:
+    // Common: 55% | Rare: 30% | Epic: 12% | Legendary: 2.5% | Mythic: 0.5%
+    const roll = Math.random() * 100;
     let pool;
-    if (roll < 0.60)      pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'epic');
-    else if (roll < 0.92) pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'legendary');
-    else                  pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'mythic');
+    if (roll < 55)       pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'common');
+    else if (roll < 85)  pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'rare');
+    else if (roll < 97)  pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'epic');
+    else if (roll < 99.5) pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'legendary');
+    else                 pool = SPAWN_ARTIFACTS.filter(a => a.rarity === 'mythic');
     artifact = pool[Math.floor(Math.random() * pool.length)];
   }
 

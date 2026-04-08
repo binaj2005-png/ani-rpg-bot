@@ -168,18 +168,18 @@ module.exports = {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎒 POTIONS & SUPPLIES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 🩹 Health Potion - 5,000 gold
+1. 🩹 Health Potion - 800 gold
    Restores 50% HP
    
-2. ${player.energyColor || '💙'} ${player.energyType || 'Energy'} Potion - 4,000 gold
+2. ${player.energyColor || '💙'} ${player.energyType || 'Energy'} Potion - 600 gold
    Restores 50% ${player.energyType || 'Energy'}
    
-3. 🎫 Revive Token - 10,000 gold
+3. 🎫 Revive Token - 3,000 gold
 4. 🎟️ Summon Ticket - 50,000 gold
 5. 💎 Mana Crystals x100 - 80,000 gold
    Revive once if defeated
 
-4. 🍀 Luck Potion - 5,000 gold
+4. 🍀 Luck Potion - 2,000 gold
    +25% catch rate & better casino odds
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚔️ WEAPONS
@@ -237,7 +237,7 @@ Example: /shop buy 1 5 | /shop buy 4 1
 
       switch(itemNum) {
         case 1: // Health Potion
-          cost = 5000 * amount;
+          cost = 800 * amount;
           currency = 'gold';
           itemName = `Health Potion${amount > 1 ? 's' : ''}`;
           
@@ -251,7 +251,7 @@ Example: /shop buy 1 5 | /shop buy 4 1
           break;
 
         case 2: // Energy Potion
-          cost = 4000 * amount;
+          cost = 600 * amount;
           currency = 'gold';
           itemName = `${player.energyType || 'Energy'} Potion${amount > 1 ? 's' : ''}`;
           
@@ -288,7 +288,7 @@ Example: /shop buy 1 5 | /shop buy 4 1
           cost = 80000 * amount;
           break;
         case 3: // Revive Token
-          cost = 10000 * amount;
+          cost = 3000 * amount;
           currency = 'gold';
           itemName = `Revive Token${amount > 1 ? 's' : ''}`;
           
@@ -302,7 +302,7 @@ Example: /shop buy 1 5 | /shop buy 4 1
           break;
 
         case 4: // Luck Potion
-          cost = 5000 * amount;
+          cost = 2000 * amount;
           currency = 'gold';
           itemName = `Luck Potion${amount > 1 ? 's' : ''}`;
           

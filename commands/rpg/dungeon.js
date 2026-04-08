@@ -132,7 +132,72 @@ module.exports = {
 
     // ── HELP ─────────────────────────────────────────────────
     if (!sub || sub === 'help') {
-      return sock.sendMessage(chatId, { text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏰 *TOWER DUNGEON SYSTEM*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🗂️ 8 Dungeon Types × 20 Floors each\n👹 Boss every 5 floors (F5, F10, F15, F20)\n👥 Party of 2-5 hunters required!\n\n📋 *COMMANDS:*\n/dungeon types        — See all dungeon types\n/dungeon party create — Form a party\n/dungeon party join [ID] — Join party\n/dungeon party info   — Party status\n/dungeon party leave  — Leave party\n/dungeon shop         — Buy items\n/dungeon ready        — Mark yourself ready\n/dungeon start [#]    — Leader chooses dungeon\n/dungeon attack       — Attack current enemy\n/dungeon use [skill]  — Use a skill\n/dungeon item [hp/energy/revive] — Use item\n/dungeon advance      — Go to next floor\n/dungeon leave        — Exit dungeon (keep rewards)\n/dungeon flee         — Flee (last resort)\n/dungeon status       — Check floor/party status\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 After each boss: choose to *advance* or *leave*!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━` }, { quoted: msg });
+      return sock.sendMessage(chatId, { text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏰 *TOWER DUNGEON SYSTEM*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🗂️ 8 Dungeon Types × 20 Floors each\n👹 Boss every 5 floors (F5, F10, F15, F20)\n👤 Solo or 👥 Party of 2-5 hunters!\n\n📋 *SOLO COMMANDS:*\n/dungeon solo         — Start solo dungeon\n/dungeon solo [#]     — Pick dungeon type\n/dungeon attack       — Attack\n/dungeon use [skill]  — Use skill\n/dungeon item [hp/energy/revive] — Use item\n/dungeon advance      — Next floor\n/dungeon leave        — Exit (keep rewards)\n/dungeon flee         — Flee\n\n📋 *PARTY COMMANDS:*\n/dungeon party create — Form a party\n/dungeon party join [ID] — Join party\n/dungeon party info   — Party status\n/dungeon party leave  — Leave party\n/dungeon ready        — Mark yourself ready\n/dungeon start [#]    — Leader starts dungeon\n\n📋 *OTHER:*\n/dungeon types        — See all dungeon types\n/dungeon shop         — Buy items\n/dungeon status       — Check floor/party status\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 Solo: 10 floors, easier monsters, good rewards!\n💡 Party: 20 floors, harder, MUCH better rewards!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━` }, { quoted: msg });
+    }
+
+    // ── SOLO DUNGEON ──────────────────────────────────────────
+    if (sub === 'solo') {
+      // Check if already in a party dungeon
+      const existingParty = DungeonPartyManager.getPartyByPlayer(sender);
+      if (existingParty?.status === 'active') {
+        return sock.sendMessage(chatId, { text: '❌ You are already in a party dungeon!\nUse /dungeon leave to exit first.' }, { quoted: msg });
+      }
+
+      // Check if already in solo dungeon
+      if (db.soloDungeons && db.soloDungeons[sender]) {
+        const sd = db.soloDungeons[sender];
+        const monster = sd.currentMonster;
+        const hpBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 10, '🔴', '⬛');
+        const pHpBar = BarSystem.createBar(player.stats.hp, player.stats.maxHp, 10, '💚', '⬛');
+        return sock.sendMessage(chatId, {
+          text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ *SOLO DUNGEON IN PROGRESS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏰 ${sd.dungeonName} | Floor ${sd.currentFloor}/10\n\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n${hpBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n\n👤 *${player.name}*\n${pHpBar} ${player.stats.hp}/${player.stats.maxHp} HP\n\n/dungeon attack — Attack\n/dungeon use [skill] — Use skill\n/dungeon item hp — Use health potion\n/dungeon flee — Flee\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        }, { quoted: msg });
+      }
+
+      // Pick dungeon type
+      const available = DungeonManager.getAvailableTypes(player.level);
+      if (available.length === 0) {
+        return sock.sendMessage(chatId, { text: '❌ No dungeons available at your level!' }, { quoted: msg });
+      }
+
+      const choice = parseInt(args[1]);
+      if (!args[1] || isNaN(choice)) {
+        let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏰 *SOLO DUNGEON — CHOOSE TYPE*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour Level: ${player.level}\n⚠️ Solo: 10 floors, scaled to your level\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        available.forEach((d, i) => {
+          txt += `*${i+1}.* ${d.emoji} ${d.name} [Rank ${d.rank}]\n   Req. Lv${d.minLevel}+ | ${d.description}\n\n`;
+        });
+        txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n/dungeon solo [#] to enter`;
+        return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+      }
+
+      const dtype = available[choice - 1];
+      if (!dtype) return sock.sendMessage(chatId, { text: '❌ Invalid choice!' }, { quoted: msg });
+
+      // Spawn first monster (scaled easier for solo — 70% of normal stats)
+      const monster = DungeonManager.getFloorMonster(dtype.id, 1, player.level);
+      monster.stats.hp = Math.floor(monster.stats.hp * 0.7);
+      monster.stats.maxHp = monster.stats.hp;
+      monster.stats.atk = Math.floor(monster.stats.atk * 0.7);
+      monster.stats.def = Math.floor(monster.stats.def * 0.7);
+
+      if (!db.soloDungeons) db.soloDungeons = {};
+      db.soloDungeons[sender] = {
+        dungeonTypeId: dtype.id,
+        dungeonName: dtype.name,
+        currentFloor: 1,
+        maxFloors: 10,
+        currentMonster: monster,
+        totalXp: 0,
+        totalGold: 0,
+        totalCrystals: 0,
+        startTime: Date.now(),
+      };
+      saveDatabase();
+
+      const hpBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 10, '🔴', '⬛');
+      return sock.sendMessage(chatId, {
+        text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${dtype.emoji} *${dtype.name.toUpperCase()} — SOLO*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👤 Solo run | 10 Floors | Bosses at F5, F10\n⚠️ Monsters scaled to your level\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔽 *FLOOR 1*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n${hpBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n⚡ /dungeon use [skill]\n🎒 /dungeon item hp\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      }, { quoted: msg });
     }
 
     // ── TYPES ─────────────────────────────────────────────────
@@ -335,6 +400,49 @@ module.exports = {
 
     // ── ADVANCE ───────────────────────────────────────────────
     if (sub === 'advance') {
+      // ── SOLO ADVANCE ──────────────────────────────────────
+      if (db.soloDungeons && db.soloDungeons[sender]) {
+        const sd = db.soloDungeons[sender];
+        if (!sd.awaitingAdvance) {
+          return sock.sendMessage(chatId, { text: '❌ Defeat the current enemy first!' }, { quoted: msg });
+        }
+        const nextFloor = sd.currentFloor + 1;
+        if (nextFloor > sd.maxFloors) {
+          // Complete
+          player.xp = (player.xp || 0) + sd.totalXp;
+          player.gold = (player.gold || 0) + sd.totalGold;
+          player.manaCrystals = (player.manaCrystals || 0) + sd.totalCrystals;
+          delete db.soloDungeons[sender];
+          saveDatabase();
+          return sock.sendMessage(chatId, {
+            text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏆 *SOLO DUNGEON COMPLETE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ All 10 floors cleared!\n\n📊 *TOTAL REWARDS:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💪 Well done, solo hunter!`
+          }, { quoted: msg });
+        }
+
+        const isBoss = nextFloor % 5 === 0;
+        const monster = isBoss
+          ? DungeonManager.getFloorBoss(sd.dungeonTypeId, nextFloor, player.level)
+          : DungeonManager.getFloorMonster(sd.dungeonTypeId, nextFloor, player.level);
+
+        // Scale down for solo
+        monster.stats.hp = Math.floor(monster.stats.hp * 0.7);
+        monster.stats.maxHp = monster.stats.hp;
+        monster.stats.atk = Math.floor(monster.stats.atk * 0.7);
+        monster.stats.def = Math.floor(monster.stats.def * 0.7);
+
+        sd.currentFloor = nextFloor;
+        sd.currentMonster = monster;
+        sd.awaitingAdvance = false;
+        saveDatabase();
+
+        const mBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 10, '🔴', '⬛');
+        let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        txt += isBoss ? `⚠️ *BOSS — FLOOR ${nextFloor}!*\n` : `🔽 *FLOOR ${nextFloor}*\n`;
+        txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]${isBoss ? ' 🔴 BOSS' : ''}\n${mBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n🎒 /dungeon item hp`;
+        return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+      }
+
+      // ── PARTY ADVANCE ─────────────────────────────────────
       const party = DungeonPartyManager.getPartyByPlayer(sender);
       if (!party || party.status !== 'active') return sock.sendMessage(chatId, { text: '❌ Not in an active dungeon!' }, { quoted: msg });
       if (party.leader !== sender) return sock.sendMessage(chatId, { text: '❌ Only the party leader can advance!' }, { quoted: msg });
@@ -376,6 +484,18 @@ module.exports = {
 
     // ── LEAVE (voluntary exit) ────────────────────────────────
     if (sub === 'leave') {
+      // Solo leave
+      if (db.soloDungeons && db.soloDungeons[sender]) {
+        const sd = db.soloDungeons[sender];
+        player.xp = (player.xp || 0) + sd.totalXp;
+        player.gold = (player.gold || 0) + sd.totalGold;
+        player.manaCrystals = (player.manaCrystals || 0) + sd.totalCrystals;
+        delete db.soloDungeons[sender];
+        saveDatabase();
+        return sock.sendMessage(chatId, {
+          text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🚪 *EXITED SOLO DUNGEON*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nCleared ${sd.currentFloor - 1} floor(s)\n\n📦 *REWARDS KEPT:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        }, { quoted: msg });
+      }
       const party = DungeonPartyManager.getPartyByPlayer(sender);
       if (!party || party.status !== 'active') return sock.sendMessage(chatId, { text: '❌ Not in an active dungeon!' }, { quoted: msg });
       if (!party.dungeon.awaitingAdvance && party.leader === sender) {
@@ -386,6 +506,12 @@ module.exports = {
 
     // ── FLEE ──────────────────────────────────────────────────
     if (sub === 'flee') {
+      // Solo flee — lose all rewards
+      if (db.soloDungeons && db.soloDungeons[sender]) {
+        delete db.soloDungeons[sender];
+        saveDatabase();
+        return sock.sendMessage(chatId, { text: '🏃 *You fled the dungeon!*\n❌ All rewards lost.\n\nUse /dungeon solo to try again.' }, { quoted: msg });
+      }
       const party = DungeonPartyManager.getPartyByPlayer(sender);
       if (!party || party.status !== 'active') return sock.sendMessage(chatId, { text: '❌ Not in an active dungeon!' }, { quoted: msg });
       if (party.members.length === 1) return sock.sendMessage(chatId, { text: '⛓️ *You cannot flee!*\nYou are the last one standing!\nFight or fall!' }, { quoted: msg });
@@ -394,6 +520,91 @@ module.exports = {
 
     // ── ATTACK ────────────────────────────────────────────────
     if (sub === 'attack') {
+      // ── SOLO ATTACK ───────────────────────────────────────
+      if (db.soloDungeons && db.soloDungeons[sender]) {
+        const sd = db.soloDungeons[sender];
+        const monster = sd.currentMonster;
+
+        if (sd.awaitingAdvance) {
+          return sock.sendMessage(chatId, { text: '✅ Floor cleared!\n/dungeon advance — next floor\n/dungeon leave — exit with rewards' }, { quoted: msg });
+        }
+
+        // Player attacks monster
+        const weapAtk = player.weapon?.bonus || player.weapon?.attack || 0;
+        const totalAtk = (player.stats.atk || 10) + weapAtk;
+        const monDef = monster.stats.def || 0;
+        const rawDmg = Math.max(1, totalAtk - Math.floor(monDef * 0.4));
+        const isCrit = Math.random() < 0.15;
+        const playerDmg = isCrit ? Math.floor(rawDmg * 1.5) : rawDmg;
+        monster.stats.hp = Math.max(0, monster.stats.hp - playerDmg);
+
+        let log = `⚔️ *${player.name}* attacks *${monster.name}*!\n`;
+        log += isCrit ? `💥 CRITICAL! -${playerDmg} HP!\n` : `⚔️ -${playerDmg} HP!\n`;
+
+        if (monster.stats.hp <= 0) {
+          // Monster defeated
+          const isBoss = sd.currentFloor % 5 === 0;
+          const rewards = DungeonManager.getFloorRewards(sd.currentFloor, player.level, isBoss);
+          // Solo gets 60% of party rewards — still worth it
+          const xpGain = Math.floor(rewards.xp * 0.6);
+          const goldGain = Math.floor(rewards.gold * 0.6);
+          const crystalGain = Math.floor((rewards.crystals || 0) * 0.6);
+
+          sd.totalXp += xpGain;
+          sd.totalGold += goldGain;
+          sd.totalCrystals += crystalGain;
+
+          log += `\n💀 *${monster.name}* defeated!\n`;
+          log += `✨ +${xpGain} XP | 💰 +${goldGain} Gold | 💎 +${crystalGain} Crystals\n`;
+
+          if (sd.currentFloor >= sd.maxFloors) {
+            // Dungeon complete!
+            player.xp = (player.xp || 0) + sd.totalXp;
+            player.gold = (player.gold || 0) + sd.totalGold;
+            player.manaCrystals = (player.manaCrystals || 0) + sd.totalCrystals;
+            delete db.soloDungeons[sender];
+            saveDatabase();
+            return sock.sendMessage(chatId, {
+              text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏆 *SOLO DUNGEON COMPLETE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ All 10 floors cleared!\n\n📊 *TOTAL REWARDS:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💪 Well done, solo hunter!`
+            }, { quoted: msg });
+          }
+
+          sd.awaitingAdvance = true;
+          saveDatabase();
+          const bossNote = isBoss ? '\n👹 *BOSS DEFEATED!* You earned bonus rewards!' : '';
+          log += `${bossNote}\n\n/dungeon advance — Floor ${sd.currentFloor + 1}\n/dungeon leave — Exit with rewards`;
+          return sock.sendMessage(chatId, { text: log }, { quoted: msg });
+        }
+
+        // Monster counterattacks
+        const monAtk = monster.stats.atk || 10;
+        const playerDef = player.stats.def || 0;
+        const monDmg = Math.max(1, Math.floor((monAtk - playerDef * 0.4) * (0.85 + Math.random() * 0.3)));
+        player.stats.hp = Math.max(0, player.stats.hp - monDmg);
+
+        log += `\n💢 *${monster.name}* strikes back! -${monDmg} HP!\n`;
+
+        const mHpBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 8, '🔴', '⬛');
+        const pHpBar = BarSystem.createBar(player.stats.hp, player.stats.maxHp, 8, '💚', '⬛');
+        log += `\n${monster.emoji} ${mHpBar} ${monster.stats.hp}/${monster.stats.maxHp}\n👤 ${pHpBar} ${player.stats.hp}/${player.stats.maxHp}`;
+
+        if (player.stats.hp <= 0) {
+          // Player died — give partial rewards
+          player.stats.hp = 1; // Leave at 1 so they're not fully dead
+          player.xp = (player.xp || 0) + Math.floor(sd.totalXp * 0.5);
+          player.gold = (player.gold || 0) + Math.floor(sd.totalGold * 0.5);
+          delete db.soloDungeons[sender];
+          saveDatabase();
+          return sock.sendMessage(chatId, {
+            text: `${log}\n\n💀 *You were defeated on Floor ${sd.currentFloor}!*\n📦 You kept 50% of your earned rewards.\n✨ XP: +${Math.floor(sd.totalXp * 0.5)} | 💰 Gold: +${Math.floor(sd.totalGold * 0.5)}\n\n🏥 Use /heal to recover.`
+          }, { quoted: msg });
+        }
+
+        saveDatabase();
+        return sock.sendMessage(chatId, { text: log }, { quoted: msg });
+      }
+
+      // ── PARTY ATTACK ──────────────────────────────────────
       const party = DungeonPartyManager.getPartyByPlayer(sender);
       if (!party || party.status !== 'active') return sock.sendMessage(chatId, { text: '❌ No active dungeon!' }, { quoted: msg });
       if (party.dungeon.awaitingAdvance) return sock.sendMessage(chatId, { text: '✅ Floor cleared! Use /dungeon advance to go deeper, or /dungeon leave to exit.' }, { quoted: msg });
@@ -505,6 +716,32 @@ module.exports = {
 
     // ── ITEM ──────────────────────────────────────────────────
     if (sub === 'item') {
+      // ── SOLO ITEM ─────────────────────────────────────────
+      if (db.soloDungeons && db.soloDungeons[sender]) {
+        const itemType = args[1]?.toLowerCase();
+        if (itemType === 'hp' || itemType === 'health') {
+          const potions = player.inventory?.healthPotions || 0;
+          if (potions <= 0) return sock.sendMessage(chatId, { text: '❌ No Health Potions!\nBuy some: /shop buy 1 5' }, { quoted: msg });
+          player.inventory.healthPotions--;
+          const heal = Math.floor(player.stats.maxHp * 0.5);
+          player.stats.hp = Math.min(player.stats.maxHp, player.stats.hp + heal);
+          saveDatabase();
+          return sock.sendMessage(chatId, { text: `🩹 Healed *+${heal} HP*!\n❤️ ${player.stats.hp}/${player.stats.maxHp}\n🩹 Potions left: ${player.inventory.healthPotions}` }, { quoted: msg });
+        }
+        if (itemType === 'ep' || itemType === 'energy') {
+          const potions = player.inventory?.energyPotions || player.inventory?.manaPotions || 0;
+          if (potions <= 0) return sock.sendMessage(chatId, { text: '❌ No Energy Potions!\nBuy some: /shop buy 2 5' }, { quoted: msg });
+          if (player.inventory.energyPotions !== undefined) player.inventory.energyPotions--;
+          else player.inventory.manaPotions--;
+          const restore = Math.floor(player.stats.maxEnergy * 0.5);
+          player.stats.energy = Math.min(player.stats.maxEnergy, (player.stats.energy || 0) + restore);
+          saveDatabase();
+          return sock.sendMessage(chatId, { text: `💙 Restored *+${restore} Energy*!\n💙 ${player.stats.energy}/${player.stats.maxEnergy}` }, { quoted: msg });
+        }
+        return sock.sendMessage(chatId, { text: '❌ Usage: /dungeon item hp OR /dungeon item energy' }, { quoted: msg });
+      }
+
+      // ── PARTY ITEM ────────────────────────────────────────
       const party = DungeonPartyManager.getPartyByPlayer(sender);
       if (!party || party.status !== 'active') return sock.sendMessage(chatId, { text: '❌ No active dungeon!' }, { quoted: msg });
 

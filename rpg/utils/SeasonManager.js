@@ -153,6 +153,27 @@ const SEASONS = {
     color: '#F1C40F',
     exclusiveDrops: ['Star Fragment', 'Celestial Core', 'Cosmic Artifact'],
   },
+
+  return_of_heroes: {
+    id: 'return_of_heroes',
+    name: '🏆 Return of Heroes',
+    emoji: '🔰',
+    description: 'The legends return. Massive catch-up bonuses for all players. A second chance at greatness.',
+    theme: 'comeback',
+    duration: 7,
+    bonuses: {
+      xpMult:           3.0,   // 3× XP — catch up fast
+      goldMult:         3.0,   // 3× gold
+      dailyBonusMult:   5.0,   // 5× daily rewards
+      dropRateBoost:    0.40,  // +40% drop rate
+      shopDiscount:     0.50,  // 50% off shop
+      pvpEloMult:       1.5,
+    },
+    pvpBonus: { eloMult: 1.5, msg: '🏆 Return of Heroes: +50% ELO gains!' },
+    spawnMsg: '🏆 *RETURN OF HEROES!*\n\nThe realm calls its warriors back.\nEvery hunter gets a second chance at greatness.\n\n✨ XP: ×3 | 💰 Gold: ×3\n📅 Daily rewards: ×5\n🛒 Shop: 50% OFF everything\n🎁 Drop rates: +40%\n⚔️ PvP ELO: ×1.5\n\n💬 _"The strong return stronger. The fallen rise again."_\n\n⏰ Lasts 7 days. Welcome back, heroes.',
+    color: '#2ECC71',
+    exclusiveDrops: ['Hero\'s Crest', 'Return Medal', 'Champion\'s Seal'],
+  },
 };
 
 // Monthly schedule — which event runs each month

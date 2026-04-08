@@ -211,15 +211,15 @@ function scaleBossForFloor(bossDef, playerLevel, floor) {
 
 function calculateFloorRewards(floor, playerLevel, isBoss) {
   const base = {
-    xp:       Math.floor((150 + floor * 80) * (1 + playerLevel * 0.05)),
-    gold:     Math.floor((800 + floor * 400) * (1 + playerLevel * 0.05)),
-    crystals: Math.floor((8  + floor * 3)  * (1 + playerLevel * 0.02)),
+    xp:       Math.floor((300 + floor * 160) * (1 + playerLevel * 0.05)),
+    gold:     Math.floor((2000 + floor * 900) * (1 + playerLevel * 0.05)),
+    crystals: Math.floor((15  + floor * 6)   * (1 + playerLevel * 0.02)),
   };
   if (isBoss) {
-    base.xp       = Math.floor(base.xp * 5);
-    base.gold     = Math.floor(base.gold * 4);
-    base.crystals = Math.floor(base.crystals * 4);
-    base.upgradePoints = floor === 20 ? 12 : floor === 15 ? 8 : floor === 10 ? 5 : 3;
+    base.xp       = Math.floor(base.xp * 6);
+    base.gold     = Math.floor(base.gold * 6);
+    base.crystals = Math.floor(base.crystals * 5);
+    base.upgradePoints = floor === 20 ? 15 : floor === 15 ? 10 : floor === 10 ? 6 : 4;
   }
   return base;
 }
