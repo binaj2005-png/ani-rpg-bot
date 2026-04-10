@@ -715,23 +715,25 @@ async function connectToWhatsApp() {
     if (settings?.announcements === false) return;
 
     for (const participant of participants) {
-      const numStr = participant.replace(/[^0-9]/g, '');
+      const numStr  = participant.replace(/[^0-9]/g, '');
+      const tag     = participant; // full JID for mentions array
+      const tagNum  = numStr;      // just digits for @mention in text
       let text = '';
       const mentions = [participant];
 
       if (action === 'add') {
         if (numStr.startsWith(CREATOR_ID)) {
           text = pick(JOIN_NARUTO);
-          text += '\n\n@' + participant;
-          try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) {}
+          text += '\n\n@' + tagNum;
+          try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) { console.error('Greeting send error:', e.message); }
         } else if (numStr.startsWith(COOWNER_ID)) {
           text = pick(JOIN_COOWNER);
-          text += '\n\n@' + participant;
-          try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) {}
+          text += '\n\n@' + tagNum;
+          try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) { console.error('Greeting send error:', e.message); }
         } else {
-          // Welcome message
-          text = pick(JOIN_MSGS).replace('{tag}', participant);
-          try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) {}
+          // Replace {tag} with just the phone number for proper WhatsApp mention rendering
+          text = pick(JOIN_MSGS).replace('{tag}', tagNum);
+          try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) { console.error('Greeting send error:', e.message); }
 
           // Tutorial DM after 2 seconds
           setTimeout(async () => {
@@ -739,7 +741,7 @@ async function connectToWhatsApp() {
 👋 *Welcome to Ani R.P.G!*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Hey @${participant.split('@')[0]}! Here's how to get started 🎮
+Hey @${tagNum}! Here's how to get started 🎮
 
 *⚡ STEP 1 — Create your character*
 /register [name]
@@ -770,7 +772,6 @@ Hey @${participant.split('@')[0]}! Here's how to get started 🎮
 ⚔️ Good luck, hunter!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-            // Send tutorial in group tagging them
             try {
               await sock.sendMessage(chatId, {
                 text: tutorial,
@@ -782,8 +783,8 @@ Hey @${participant.split('@')[0]}! Here's how to get started 🎮
           }, 2000);
         }
       } else {
-        text = pick(LEAVE_MSGS).replace('{tag}', participant);
-        try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) {}
+        text = pick(LEAVE_MSGS).replace('{tag}', tagNum);
+        try { await sock.sendMessage(chatId, { text, mentions }); } catch(e) { console.error('Leave msg send error:', e.message); }
       }
     }
   });

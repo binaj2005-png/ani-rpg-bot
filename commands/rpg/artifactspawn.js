@@ -181,7 +181,7 @@ async function handleClaim(sock, msg, args, getDatabase, saveDatabase, sender) {
         rarity:      art.rarity,
         type:        art.type,
         description: art.desc,
-        bonuses:     art.bonus,
+        stats:       art.bonus,   // ← must be 'stats' to match ArtifactSystem
         requirements: {},
       };
     }

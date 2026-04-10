@@ -172,7 +172,22 @@ module.exports = {
       }
 
       const artifactName = player.artifacts.inventory[index];
-      const artifact = ArtifactSystem.getArtifact(artifactName);
+      let artifact = ArtifactSystem.getArtifact(artifactName);
+
+      // Spawned artifacts may not be in ArtifactSystem after a bot restart.
+      // Reconstruct a minimal entry so the player can still equip it.
+      if (!artifact && typeof artifactName === 'string') {
+        artifact = {
+          name: artifactName,
+          emoji: '🏺',
+          rarity: 'rare',
+          type: 'weapon',
+          description: 'A powerful artifact',
+          stats: {},
+          requirements: {},
+        };
+        ArtifactSystem.ARTIFACT_DATABASE[artifactName] = artifact;
+      }
 
       if (!artifact) {
         return sock.sendMessage(chatId, { 
