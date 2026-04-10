@@ -568,12 +568,32 @@ async function connectToWhatsApp() {
         const ArtifactSpawn = require('./commands/rpg/artifactspawn');
         const db = getDatabase();
         const activeGroups = new Set();
-        Object.values(db.users || {}).forEach(user => {
-          if (user.lastChatId && user.lastChatId.endsWith('@g.us')) activeGroups.add(user.lastChatId);
-          if (user.groupId && user.groupId.endsWith('@g.us')) activeGroups.add(user.groupId);
+
+        // ✅ PRIORITY 1: Use community-designated RPG group IDs (dungeon, pvp, main)
+        // This avoids artifacts spawning in casino/trading groups
+        const community = db.community || {};
+        const RPG_GROUP_KEYS = ['dungeon_groupId', 'pvp_groupId', 'main_groupId', 'rpg_groupId'];
+        RPG_GROUP_KEYS.forEach(key => {
+          if (community[key] && community[key].endsWith('@g.us')) activeGroups.add(community[key]);
         });
-        // Fallback: use hardcoded group from env var
+
+        // ✅ PRIORITY 2: Env var override
         if (process.env.MAIN_GROUP_ID) activeGroups.add(process.env.MAIN_GROUP_ID);
+
+        // ✅ PRIORITY 3: Fallback — only use lastChatId if nothing else found,
+        //    but exclude any group IDs that are designated as casino/trading
+        if (activeGroups.size === 0) {
+          const excludedGroups = new Set([
+            community.casino_groupId,
+            community.trading_groupId,
+            community.market_groupId,
+          ].filter(Boolean));
+          Object.values(db.users || {}).forEach(user => {
+            const id = user.lastChatId || user.groupId;
+            if (id && id.endsWith('@g.us') && !excludedGroups.has(id)) activeGroups.add(id);
+          });
+        }
+
         const groupList = [...activeGroups];
         if (groupList.length > 0) {
           ArtifactSpawn.startSpawnScheduler(sock, getDatabase, saveDatabase, groupList);
