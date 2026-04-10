@@ -14,9 +14,7 @@ const Announcer = require('./rpg/utils/Announcer');
 const GuildWar = require('./commands/rpg/guildwar');
 
 // ── MongoDB setup ─────────────────────────────────────────────
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://botuser:botuser1234@cluster0.ttubqaz.mongodb.net/rpgbot?appName=Cluster0';
-let mongoClient = null;
-let mongoDb = null;
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://Botuser1234:test1234@cluster0.ttubqaz.mongodb.net/rpgbot?retryWrites=true&w=majority&authSource=admin';
 let mongoCollection = null;
 
 async function connectMongo() {
