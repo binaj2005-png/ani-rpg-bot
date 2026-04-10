@@ -195,8 +195,10 @@ module.exports = {
       saveDatabase();
 
       const hpBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
+      const atmo0 = dtype.atmosphere[Math.floor(Math.random() * dtype.atmosphere.length)];
+      const line0 = getDialogue(monster.name);
       return sock.sendMessage(chatId, {
-        text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${dtype.emoji} *${dtype.name.toUpperCase()} — SOLO*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👤 Solo run | 10 Floors | Bosses at F5, F10\n⚠️ Monsters scaled to your level\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔽 *FLOOR 1*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n${hpBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n⚡ /dungeon use [skill]\n🎒 /dungeon item hp\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${dtype.emoji} *${dtype.name.toUpperCase()} — SOLO*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${atmo0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👤 Solo | 10 Floors | Boss at F5 & F10\n📊 Rank: ${dtype.rank} | Monsters scaled to Lv${player.level}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔽 *FLOOR 1*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n💬 "${line0}"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${hpBar}\n❤️ ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n💥 Abilities: ${monster.abilities.join(', ')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n⚡ /dungeon use [skill]\n🎒 /dungeon item [hp/energy]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
       }, { quoted: msg });
     }
 
@@ -435,10 +437,17 @@ module.exports = {
         sd.awaitingAdvance = false;
         saveDatabase();
 
+        const dtype2 = DungeonManager.getDungeonType(sd.dungeonTypeId);
+        const atmo2  = dtype2?.atmosphere[Math.floor(Math.random() * (dtype2.atmosphere.length || 1))] || '💭 You press deeper...';
+        const line2  = getDialogue(monster.name);
         const mBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
         let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        txt += isBoss ? `⚠️ *BOSS — FLOOR ${nextFloor}!*\n` : `🔽 *FLOOR ${nextFloor}*\n`;
-        txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]${isBoss ? ' 🔴 BOSS' : ''}\n${mBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n🎒 /dungeon item hp`;
+        if (isBoss) {
+          txt += `⚠️ *BOSS — FLOOR ${nextFloor}!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💭 ${monster.desc || 'A terrifying guardian blocks your path!'}\n`;
+        } else {
+          txt += `🔽 *FLOOR ${nextFloor}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${atmo2}\n`;
+        }
+        txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]${isBoss ? ' 🔴 BOSS' : ''}\n💬 "${line2}"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${mBar}\n❤️ ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n💥 Abilities: ${monster.abilities.join(', ')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n⚡ /dungeon use [skill]\n🎒 /dungeon item [hp/energy]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
         return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
       }
 
@@ -529,78 +538,109 @@ module.exports = {
           return sock.sendMessage(chatId, { text: '✅ Floor cleared!\n/dungeon advance — next floor\n/dungeon leave — exit with rewards' }, { quoted: msg });
         }
 
-        // Player attacks monster
-        const weapAtk = player.weapon?.bonus || player.weapon?.attack || 0;
-        const totalAtk = (player.stats.atk || 10) + weapAtk;
-        const monDef = monster.stats.def || 0;
-        const rawDmg = Math.max(1, totalAtk - Math.floor(monDef * 0.4));
-        const isCrit = Math.random() < 0.15;
-        const playerDmg = isCrit ? Math.floor(rawDmg * 1.5) : rawDmg;
+        // Status effects
+        const fx = StatusEffectManager.processTurnEffects(player);
+        let log = '';
+        if (fx.messages.length) log += fx.messages.join('\n') + '\n\n';
+        if (!fx.canAct) {
+          log += `❌ *${player.name}* cannot act this turn!`;
+          return sock.sendMessage(chatId, { text: log }, { quoted: msg });
+        }
+
+        // Player attacks monster — full bonus calculation like party
+        const artBSolo = ArtifactSystem.calculateCombatBonusFromPlayer?.(player);
+        const artAtkSolo = artBSolo?.bonuses?.atk || 0;
+        const weapAtkSolo = player.weapon?.bonus || player.weapon?.attack || 0;
+        PetManager.updateHunger(sender);
+        const petBSolo = PetManager.getPetBattleBonus(sender);
+        const petAtkSolo = petBSolo?.bonuses?.atk || 0;
+        const modsSolo = StatusEffectManager.getStatModifiers(player);
+        let consAtkSolo = 0;
+        try { const CS=require('../../rpg/utils/ConstellationSystem'); consAtkSolo=CS.getSponsorBonus(player).atk||0; } catch(e) {}
+        const effAtkSolo = Math.floor((player.stats.atk + weapAtkSolo + artAtkSolo + petAtkSolo + consAtkSolo) * modsSolo.atkMod);
+        const isCritSolo = Math.random() < (0.10 + (player.statAllocations?.critChance || 0) * 0.005);
+        const critMSolo  = 1.5 + (player.statAllocations?.critDamage || 0) * 0.01;
+        const playerDmg  = Math.max(1, Math.floor(effAtkSolo * (isCritSolo ? critMSolo : 1.0)) - Math.floor(monster.stats.def * 0.4));
+
+        // Lifesteal
+        const lsPctSolo = (player.statAllocations?.lifesteal || 0) * 0.5 / 100;
+        if (lsPctSolo > 0) {
+          const healLS = Math.floor(playerDmg * lsPctSolo);
+          if (healLS > 0) { player.stats.hp = Math.min(player.stats.maxHp, player.stats.hp + healLS); log += `💚 Lifesteal: +${healLS} HP\n`; }
+        }
+
         monster.stats.hp = Math.max(0, monster.stats.hp - playerDmg);
 
-        let log = `⚔️ *${player.name}* attacks *${monster.name}*!\n`;
-        log += isCrit ? `💥 CRITICAL! -${playerDmg} HP!\n` : `⚔️ -${playerDmg} HP!\n`;
+        log += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ *${player.name}* attacks *${monster.name}*!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        if (isCritSolo) log += `💥 *CRITICAL HIT!*\n`;
+        if (artAtkSolo > 0) log += `✨ Artifact: +${artAtkSolo} ATK!\n`;
+        if (petAtkSolo > 0) log += `🐾 Pet: +${petAtkSolo} ATK!\n`;
+        log += `💥 Dealt *${playerDmg}* damage!\n`;
 
         if (monster.stats.hp <= 0) {
           // Monster defeated
-          const isBoss = sd.currentFloor % 5 === 0;
-          const rewards = DungeonManager.getFloorRewards(sd.currentFloor, player.level, isBoss);
-          // Solo gets 60% of party rewards — still worth it
-          const xpGain = Math.floor(rewards.xp * 0.6);
-          const goldGain = Math.floor(rewards.gold * 0.6);
+          const isBossSolo = sd.currentFloor % 5 === 0;
+          const rewards = DungeonManager.getFloorRewards(sd.currentFloor, player.level, isBossSolo);
+          const xpGain      = Math.floor(rewards.xp * 0.6);
+          const goldGain    = Math.floor(rewards.gold * 0.6);
           const crystalGain = Math.floor((rewards.crystals || 0) * 0.6);
 
-          sd.totalXp += xpGain;
-          sd.totalGold += goldGain;
+          sd.totalXp      += xpGain;
+          sd.totalGold    += goldGain;
           sd.totalCrystals += crystalGain;
 
-          log += `\n💀 *${monster.name}* defeated!\n`;
+          log += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+          log += `💀 *${monster.name}* has been defeated!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
           log += `✨ +${xpGain} XP | 💰 +${goldGain} Gold | 💎 +${crystalGain} Crystals\n`;
+          if (isBossSolo) log += `\n👹 *BOSS DEFEATED!* You earned bonus rewards!`;
 
           if (sd.currentFloor >= sd.maxFloors) {
-            // Dungeon complete!
-            player.xp = (player.xp || 0) + sd.totalXp;
-            player.gold = (player.gold || 0) + sd.totalGold;
-            player.manaCrystals = (player.manaCrystals || 0) + sd.totalCrystals;
+            player.xp           = (player.xp           || 0) + sd.totalXp;
+            player.gold         = (player.gold          || 0) + sd.totalGold;
+            player.manaCrystals = (player.manaCrystals  || 0) + sd.totalCrystals;
             delete db.soloDungeons[sender];
             saveDatabase();
             return sock.sendMessage(chatId, {
-              text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏆 *SOLO DUNGEON COMPLETE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ All 10 floors cleared!\n\n📊 *TOTAL REWARDS:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💪 Well done, solo hunter!`
+              text: `${log}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏆 *SOLO DUNGEON COMPLETE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ All 10 floors cleared!\n\n📊 *TOTAL REWARDS:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💪 Well done, solo hunter!`
             }, { quoted: msg });
           }
 
           sd.awaitingAdvance = true;
           saveDatabase();
-          const bossNote = isBoss ? '\n👹 *BOSS DEFEATED!* You earned bonus rewards!' : '';
-          log += `${bossNote}\n\n/dungeon advance — Floor ${sd.currentFloor + 1}\n/dungeon leave — Exit with rewards`;
+          log += `\n\n🏆 Floor ${sd.currentFloor} cleared!\n/dungeon advance — Floor ${sd.currentFloor + 1}\n/dungeon leave — Exit with rewards`;
           return sock.sendMessage(chatId, { text: log }, { quoted: msg });
         }
 
-        // Monster counterattacks
-        const monAtk = monster.stats.atk || 10;
-        const playerDef = player.stats.def || 0;
-        const monDmg = Math.max(1, Math.floor((monAtk - playerDef * 0.4) * (0.85 + Math.random() * 0.3)));
-        player.stats.hp = Math.max(0, player.stats.hp - monDmg);
+        // Monster counterattacks using full AI (abilities + dialogue)
+        log += executeMonsterAI(monster, player);
 
-        log += `\n💢 *${monster.name}* strikes back! -${monDmg} HP!\n`;
+        // Monster status effects tick
+        const mfxSolo = StatusEffectManager.processTurnEffects(monster);
+        if (mfxSolo.messages.length) log += '\n' + mfxSolo.messages.join('\n') + '\n';
 
         const mHpBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
         const pHpBar = BarSystem.getHPBar(player.stats.hp, player.stats.maxHp);
-        log += `\n${monster.emoji} ${mHpBar} ${monster.stats.hp}/${monster.stats.maxHp}\n👤 ${pHpBar} ${player.stats.hp}/${player.stats.maxHp}`;
 
         if (player.stats.hp <= 0) {
           // Player died — give partial rewards
-          player.stats.hp = 1; // Leave at 1 so they're not fully dead
-          player.xp = (player.xp || 0) + Math.floor(sd.totalXp * 0.5);
-          player.gold = (player.gold || 0) + Math.floor(sd.totalGold * 0.5);
+          player.stats.hp = 1;
+          player.xp   = (player.xp   || 0) + Math.floor(sd.totalXp  * 0.5);
+          player.gold = (player.gold  || 0) + Math.floor(sd.totalGold * 0.5);
           delete db.soloDungeons[sender];
           saveDatabase();
           return sock.sendMessage(chatId, {
-            text: `${log}\n\n💀 *You were defeated on Floor ${sd.currentFloor}!*\n📦 You kept 50% of your earned rewards.\n✨ XP: +${Math.floor(sd.totalXp * 0.5)} | 💰 Gold: +${Math.floor(sd.totalGold * 0.5)}\n\n🏥 Use /heal to recover.`
+            text: `${log}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💀 *DEFEATED on Floor ${sd.currentFloor}!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📦 Kept 50% of earned rewards.\n✨ XP: +${Math.floor(sd.totalXp * 0.5)} | 💰 Gold: +${Math.floor(sd.totalGold * 0.5)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏥 Use /heal to recover.`
           }, { quoted: msg });
         }
 
+        if (!sd.turn) sd.turn = 1;
+        sd.turn++;
         saveDatabase();
+
+        log += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        log += `${monster.emoji} *${monster.name}*\n${mHpBar}\n❤️ ${monster.stats.hp}/${monster.stats.maxHp}\n\n`;
+        log += `👤 *${player.name}*\n${pHpBar}\n❤️ ${player.stats.hp}/${player.stats.maxHp}\n`;
+        log += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 Floor ${sd.currentFloor}/10 | Turn ${sd.turn}`;
         return sock.sendMessage(chatId, { text: log }, { quoted: msg });
       }
 
@@ -672,6 +712,87 @@ module.exports = {
 
     // ── USE SKILL ─────────────────────────────────────────────
     if (sub === 'use') {
+      // ── SOLO SKILL ────────────────────────────────────────
+      if (db.soloDungeons && db.soloDungeons[sender]) {
+        const sd = db.soloDungeons[sender];
+        if (sd.awaitingAdvance) return sock.sendMessage(chatId, { text: '✅ Floor cleared! /dungeon advance or /dungeon leave' }, { quoted: msg });
+
+        const skillName = args.slice(1).join(' ').toLowerCase();
+        if (!skillName) return sock.sendMessage(chatId, { text: '❌ Usage: /dungeon use [skill name]' }, { quoted: msg });
+
+        const monster = sd.currentMonster;
+        const fx = StatusEffectManager.processTurnEffects(player);
+        let log = '';
+        if (fx.messages.length) log += fx.messages.join('\n') + '\n\n';
+        if (!fx.canAct) { log += `❌ ${player.name} cannot act!`; return sock.sendMessage(chatId, { text: log }, { quoted: msg }); }
+
+        const className = typeof player.class === 'string' ? player.class : player.class?.name || 'Warrior';
+        const pEnt = { name: player.name, stats: player.stats, skills: player.skills, class: { name: className }, energyType: player.energyType || 'Energy', statusEffects: player.statusEffects || [] };
+        const mEnt = { name: monster.name, stats: monster.stats, skills: {}, abilities: monster.abilities || [], statusEffects: monster.statusEffects || [] };
+
+        const result = ImprovedCombat.executeSkill(pEnt, mEnt, skillName);
+        if (!result.success) return sock.sendMessage(chatId, { text: `❌ ${result.message}` }, { quoted: msg });
+
+        player.stats.hp      = pEnt.stats.hp;
+        player.stats.energy  = pEnt.stats.energy;
+        player.statusEffects = pEnt.statusEffects;
+        monster.stats        = mEnt.stats;
+        monster.statusEffects = mEnt.statusEffects;
+        if (!sd.turn) sd.turn = 1;
+        sd.turn++;
+
+        log += result.message + '\n\n';
+
+        if (monster.stats.hp <= 0) {
+          const isBossSk = sd.currentFloor % 5 === 0;
+          const rewards  = DungeonManager.getFloorRewards(sd.currentFloor, player.level, isBossSk);
+          const xpGain   = Math.floor(rewards.xp * 0.6);
+          const goldGain = Math.floor(rewards.gold * 0.6);
+          const crysGain = Math.floor((rewards.crystals || 0) * 0.6);
+          sd.totalXp += xpGain; sd.totalGold += goldGain; sd.totalCrystals += crysGain;
+
+          log += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💀 *${monster.name}* has been defeated!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+          log += `✨ +${xpGain} XP | 💰 +${goldGain} Gold | 💎 +${crysGain} Crystals\n`;
+          if (isBossSk) log += `\n👹 *BOSS DEFEATED!* Bonus rewards earned!`;
+
+          if (sd.currentFloor >= sd.maxFloors) {
+            player.xp           = (player.xp           || 0) + sd.totalXp;
+            player.gold         = (player.gold          || 0) + sd.totalGold;
+            player.manaCrystals = (player.manaCrystals  || 0) + sd.totalCrystals;
+            delete db.soloDungeons[sender];
+            saveDatabase();
+            return sock.sendMessage(chatId, {
+              text: `${log}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏆 *SOLO DUNGEON COMPLETE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ All 10 floors cleared!\n\n📊 *TOTAL REWARDS:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💪 Well done, solo hunter!`
+            }, { quoted: msg });
+          }
+
+          sd.awaitingAdvance = true;
+          saveDatabase();
+          log += `\n\n🏆 Floor ${sd.currentFloor} cleared!\n/dungeon advance — Floor ${sd.currentFloor + 1}\n/dungeon leave — Exit with rewards`;
+          return sock.sendMessage(chatId, { text: log }, { quoted: msg });
+        }
+
+        log += executeMonsterAI(monster, player);
+        const mfxSk = StatusEffectManager.processTurnEffects(monster);
+        if (mfxSk.messages.length) log += '\n' + mfxSk.messages.join('\n') + '\n';
+
+        if (player.stats.hp <= 0) {
+          player.stats.hp = 1;
+          player.xp   = (player.xp   || 0) + Math.floor(sd.totalXp  * 0.5);
+          player.gold = (player.gold  || 0) + Math.floor(sd.totalGold * 0.5);
+          delete db.soloDungeons[sender];
+          saveDatabase();
+          return sock.sendMessage(chatId, {
+            text: `${log}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💀 *DEFEATED on Floor ${sd.currentFloor}!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📦 Kept 50% of earned rewards.\n✨ XP: +${Math.floor(sd.totalXp * 0.5)} | 💰 Gold: +${Math.floor(sd.totalGold * 0.5)}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏥 Use /heal to recover.`
+          }, { quoted: msg });
+        }
+
+        saveDatabase();
+        log += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}*\n${BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp)}\n❤️ ${monster.stats.hp}/${monster.stats.maxHp}\n\n👤 *${player.name}*\n${BarSystem.getHPBar(player.stats.hp, player.stats.maxHp)}\n❤️ ${player.stats.hp}/${player.stats.maxHp}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 Floor ${sd.currentFloor}/10 | Turn ${sd.turn}`;
+        return sock.sendMessage(chatId, { text: log }, { quoted: msg });
+      }
+
+      // ── PARTY SKILL ───────────────────────────────────────
       const party = DungeonPartyManager.getPartyByPlayer(sender);
       if (!party || party.status !== 'active') return sock.sendMessage(chatId, { text: '❌ No active dungeon!' }, { quoted: msg });
       if (party.dungeon.awaitingAdvance) return sock.sendMessage(chatId, { text: '✅ Floor cleared! /dungeon advance or /dungeon leave' }, { quoted: msg });
