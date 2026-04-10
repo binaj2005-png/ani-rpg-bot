@@ -165,22 +165,23 @@ function _getRankByFloor(floor) {
 }
 
 function scaleMonsterForFloor(baseMonster, playerLevel, floor) {
-  const floorMult  = 1 + (floor - 1) * 0.18;
-  const levelMult  = 1 + (playerLevel - 1) * 0.05;
+  // Gentler scaling — monsters should be beatable at the required level
+  const floorMult  = 1 + (floor - 1) * 0.10;  // was 0.18
+  const levelMult  = 1 + (playerLevel - 1) * 0.03;  // was 0.05
   const combined   = floorMult * levelMult;
   return {
     name: baseMonster.name,
     emoji: baseMonster.emoji,
-    level: playerLevel + Math.floor(floor * 0.8),
+    level: playerLevel + Math.floor(floor * 0.5),
     rank: _getRankByFloor(floor),
     abilities: [...(baseMonster.abilities || ['Strike'])],
     isElite: false,
     isBoss: false,
     stats: {
-      hp:    Math.floor(baseMonster.baseHp  * combined),
-      maxHp: Math.floor(baseMonster.baseHp  * combined),
-      atk:   Math.floor(baseMonster.baseAtk * combined),
-      def:   Math.floor(baseMonster.baseDef * combined),
+      hp:    Math.floor(baseMonster.baseHp  * combined * 0.5),  // 50% of original
+      maxHp: Math.floor(baseMonster.baseHp  * combined * 0.5),
+      atk:   Math.floor(baseMonster.baseAtk * combined * 0.5),
+      def:   Math.floor(baseMonster.baseDef * combined * 0.5),
       speed: 80 + floor * 2
     },
     statusEffects: []
@@ -188,12 +189,12 @@ function scaleMonsterForFloor(baseMonster, playerLevel, floor) {
 }
 
 function scaleBossForFloor(bossDef, playerLevel, floor) {
-  const levelMult  = 1 + (playerLevel - 1) * 0.04;
+  const levelMult  = 1 + (playerLevel - 1) * 0.03;  // was 0.04
   const isFinal    = floor === 20;
-  const finalMult  = isFinal ? 2.5 : 1;
-  const hp  = Math.floor(bossDef.baseHp  * levelMult * finalMult);
-  const atk = Math.floor(bossDef.baseAtk * levelMult * finalMult);
-  const def = Math.floor(bossDef.baseDef * levelMult * finalMult);
+  const finalMult  = isFinal ? 1.8 : 1;  // was 2.5
+  const hp  = Math.floor(bossDef.baseHp  * levelMult * finalMult * 0.45);  // 45% of original
+  const atk = Math.floor(bossDef.baseAtk * levelMult * finalMult * 0.45);
+  const def = Math.floor(bossDef.baseDef * levelMult * finalMult * 0.45);
   return {
     name: bossDef.name,
     emoji: bossDef.emoji,

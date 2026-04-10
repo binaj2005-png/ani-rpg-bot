@@ -1080,67 +1080,83 @@ async function executeBothActions(sock, chatId, p1, p2, db, save, sender) {
   p1s.turnNumber++; p2s.turnNumber++;
   save();
 
-  // ── BUILD MESSAGE — sent one by one ───────────────────────
+  // ── BUILD MESSAGE — cinematic multi-message format ────────
   const p1Rank=getPvpRank(p1.pvpElo);
   const p2Rank=getPvpRank(p2.pvpElo);
   const turn=p1s.turnNumber-1;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   const ordered = p1First
-    ? [[p1,r1,p1Takes,p1Cls,p1Rank,p1Id,p1s,p1Staggered],[p2,r2,p2Takes,p2Cls,p2Rank,p2Id,p2s,p2Staggered]]
-    : [[p2,r2,p2Takes,p2Cls,p2Rank,p2Id,p2s,p2Staggered],[p1,r1,p1Takes,p1Cls,p1Rank,p1Id,p1s,p1Staggered]];
+    ? [[p1,r1,p1Takes,p1Cls,p1Rank,p1Id,p1s,p1Staggered,p2Takes],[p2,r2,p2Takes,p2Cls,p2Rank,p2Id,p2s,p2Staggered,p1Takes]]
+    : [[p2,r2,p2Takes,p2Cls,p2Rank,p2Id,p2s,p2Staggered,p1Takes],[p1,r1,p1Takes,p1Cls,p1Rank,p1Id,p1s,p1Staggered,p2Takes]];
 
-  // MSG 1 — Turn header
+  // MSG 1 — Turn header with both move declarations
+  const getActionEmoji = (act) => {
+    const m = { attack:'⚔️', guard:'🛡️', taunt:'😤', feint:'🎭', special:'🌟', skill:'⚡', desperation:'💀', ultimate:'🟣' };
+    return m[act?.type] || '⚔️';
+  };
   let header = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  if (arena) header += `${arena.emoji} *${arena.name}*\n`;
-  header += `⚔️ *TURN ${turn} — BOTH STRIKE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-  if (arenaMsg) header += `\n${arenaMsg}`;
+  if (arena) header += `${arena.emoji} *${arena.name}* — `;
+  header += `⚔️ *TURN ${turn}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  header += `${p1Rank.emoji} *${p1.name}* locks in ${getActionEmoji(p1Act)} *${(p1Act?.type||'attack').toUpperCase()}*\n`;
+  header += `${p2Rank.emoji} *${p2.name}* locks in ${getActionEmoji(p2Act)} *${(p2Act?.type||'attack').toUpperCase()}*\n\n`;
+  header += `⚡ *Both strike simultaneously...*`;
+  if (arenaMsg) header += `\n\n${arenaMsg}`;
   await sock.sendMessage(chatId, { text: header, mentions: [p1Id, p2Id] });
-  await sleep(800);
+  await sleep(3000);
 
-  // MSG 2 & 3 — Each player's action separately
-  for (const [pl,res,dmgTaken,cls,rank,pid,state,wasStaggered] of ordered) {
+  // MSG 2 & 3 — Each player's action with full narrative (faster player first)
+  for (const [pl, res, dmgTaken, cls, rank, pid, state, wasStaggered, dmgDealt] of ordered) {
+    const oppName = pid === p1Id ? p2.name : p1.name;
     const hpPct = pl.stats.hp / pl.stats.maxHp;
-    let pmsg = `${rank.emoji} @${pid.split('@')[0]} *${pl.name}* [${cls}]:\n`;
+    let pmsg = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    pmsg += `${rank.emoji} @${pid.split('@')[0]} *${pl.name}* [${cls}]\n`;
+    pmsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     pmsg += res.narrative;
-    if (dmgTaken > 0 && !res.wasParried) pmsg += `🩹 Took *${dmgTaken}* damage!\n`;
-    if (wasStaggered) pmsg += `⭐ *STAGGERED!* Stunned next turn!\n`;
-    if (state.rageMode && hpPct<=0.20) pmsg += `🔥 *RAGE MODE!* +30% ATK\n`;
-    if (state.ultiReady) pmsg += `🟣 *ULTIMATE READY!* → /pvp ultimate\n`;
+    if (dmgDealt > 0) {
+      pmsg += `\n💥 *${pl.name}* deals *${dmgDealt}* damage to *${oppName}*!`;
+      if (res.isCrit) pmsg += ` ✨ *CRITICAL!*`;
+    }
+    pmsg += `\n`;
+    if (dmgTaken > 0 && !res.wasParried) pmsg += `🩹 *${pl.name}* takes *${dmgTaken}* damage back!\n`;
+    if (dmgTaken === 0 && res.wasParried) pmsg += `🛡️ *${pl.name}* PARRIED the attack!\n`;
+    if (wasStaggered) pmsg += `⭐ *STAGGERED!* ${pl.name} is stunned next turn!\n`;
+    if (state.rageMode && hpPct<=0.20) pmsg += `🔥 *RAGE MODE ACTIVATED!* +30% ATK!\n`;
+    if (state.ultiReady) pmsg += `🟣 *ULTIMATE CHARGED!* → /pvp ultimate\n`;
     if (state.conquerorMode>0) pmsg += `👑 *CONQUEROR MODE!* ×3 ATK — ${state.conquerorMode} turns left!\n`;
     if (state.holyStrikes>0) pmsg += `✨ *HOLY STRIKES:* ${state.holyStrikes} charges!\n`;
     await sock.sendMessage(chatId, { text: pmsg, mentions: [pid] });
-    await sleep(900);
+    await sleep(3500);
   }
 
   // MSG 4 — Pet / status effects / cinematic (if any)
   const extraParts = [];
   if (petSacMsgs.length) extraParts.push(petSacMsgs.join(''));
-  if (petMsgs.length) extraParts.push(petMsgs.join(''));
+  if (petMsgs.length) extraParts.push(`🐾 *PET ATTACKS!*\n${petMsgs.join('')}`);
   const seAll=[...p1SE.messages,...p2SE.messages];
-  if (seAll.length) extraParts.push(`🌀 *STATUS:*\n${seAll.join('\n')}`);
+  if (seAll.length) extraParts.push(`🌀 *STATUS EFFECTS:*\n${seAll.join('\n')}`);
   const cinema=PvpExtra.buildCinematicComment(p1,p2,p1s,p2s,r1,r2,p1Takes,p2Takes,turn);
   if (cinema) extraParts.push(cinema);
   if (eventMsg) extraParts.push(eventMsg);
   const specSet=PvpExtra.spectators.get(bKey);
   if (specSet?.size>0) extraParts.push(`👁️ *${specSet.size} spectator(s) watching*`);
   if (extraParts.length > 0) {
-    await sock.sendMessage(chatId, { text: extraParts.join('\n'), mentions: [p1Id, p2Id] });
-    await sleep(800);
+    await sock.sendMessage(chatId, { text: extraParts.join('\n\n'), mentions: [p1Id, p2Id] });
+    await sleep(3000);
   }
 
-  // MSG 5 — HP bars + desperation hints
+  // MSG 5 — HP bars + status summary
   const p1HpPct=p1.stats.hp/p1.stats.maxHp;
   const p2HpPct=p2.stats.hp/p2.stats.maxHp;
-  let bars = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  bars += `${getThreatIcon(p1HpPct)} *${p1.name}*\n`;
-  bars += `${BarSystem.getHPBar(p1.stats.hp,p1.stats.maxHp)} ${p1.stats.hp}/${p1.stats.maxHp}\n`;
+  let bars = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📊 *AFTER TURN ${turn}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  bars += `${getThreatIcon(p1HpPct)} *${p1.name}* [${getClassName(p1)}]\n`;
+  bars += `${BarSystem.getHPBar(p1.stats.hp,p1.stats.maxHp)} ${p1.stats.hp}/${p1.stats.maxHp} HP\n`;
   bars += `⚡${getMomentumBar(p1s.momentum)} 🔶${getStaggerBar(p1s.stagger)} 🟣${getUltiBar(p1s.ultiGauge)}\n`;
-  if (p1s.skillCooldowns?.some(cd=>cd>0)) bars+=`🔒 *Skills:* ${getCdBar(p1s.skillCooldowns)}\n`;
-  bars += `\n${getThreatIcon(p2HpPct)} *${p2.name}*\n`;
-  bars += `${BarSystem.getHPBar(p2.stats.hp,p2.stats.maxHp)} ${p2.stats.hp}/${p2.stats.maxHp}\n`;
+  if (p1s.skillCooldowns?.some(cd=>cd>0)) bars+=`🔒 Skills: ${getCdBar(p1s.skillCooldowns)}\n`;
+  bars += `\n${getThreatIcon(p2HpPct)} *${p2.name}* [${getClassName(p2)}]\n`;
+  bars += `${BarSystem.getHPBar(p2.stats.hp,p2.stats.maxHp)} ${p2.stats.hp}/${p2.stats.maxHp} HP\n`;
   bars += `⚡${getMomentumBar(p2s.momentum)} 🔶${getStaggerBar(p2s.stagger)} 🟣${getUltiBar(p2s.ultiGauge)}\n`;
-  if (p2s.skillCooldowns?.some(cd=>cd>0)) bars+=`🔒 *Skills:* ${getCdBar(p2s.skillCooldowns)}\n`;
+  if (p2s.skillCooldowns?.some(cd=>cd>0)) bars+=`🔒 Skills: ${getCdBar(p2s.skillCooldowns)}\n`;
   bars += `━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
   if (p1HpPct<=0.15 && !p1s.desperationUsed) bars+=`\n⚠️ @${p1Id.split('@')[0]} *DESPERATION UNLOCKED!* → /pvp desperation`;
   if (p2HpPct<=0.15 && !p2s.desperationUsed) bars+=`\n⚠️ @${p2Id.split('@')[0]} *DESPERATION UNLOCKED!* → /pvp desperation`;
@@ -1322,12 +1338,15 @@ async function handleVictory(sock, chatId, winner, loser, wId, lId, db, save, wS
   loser.stats.hp=Math.floor(loser.stats.maxHp*0.15);
 
   // ── GOLD SINK: 5% death penalty on loser ─────────────────
+  // Cap player gold at 100M first to prevent runaway numbers
+  if ((loser.gold || 0) > 100000000) loser.gold = 100000000;
+  if ((winner.gold || 0) > 100000000) winner.gold = 100000000;
   const deathTax = Math.floor((loser.gold||0) * 0.05);
   if (deathTax > 0) {
     loser.gold = Math.max(0, (loser.gold||0) - deathTax);
-    winner.gold = (winner.gold||0) + Math.floor(deathTax * 0.5); // winner gets half, rest gone
+    winner.gold = (winner.gold||0) + Math.floor(deathTax * 0.5);
   }
-  const deathTaxMsg = deathTax > 0 ? `\n💸 *Death Penalty:* ${lId.split('@')[0]} lost *${deathTax}g* (5%)` : '';
+  const deathTaxMsg = deathTax > 0 ? `\n💸 *Death Penalty:* ${lId.split('@')[0]} lost *${deathTax.toLocaleString()}g* (5%)` : '';
 
   // Clear inactivity timer — battle is over
   clearBattleTimer(wId, lId);

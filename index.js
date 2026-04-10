@@ -4,6 +4,7 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { MongoClient } = require('mongodb');
 const rpgCommandHandler = require('./handlers/rpgCommandHandler');
 const PlayerMigration = require('./rpg/utils/PlayerMigration');
 const RegenManager = require('./rpg/utils/RegenManager');
@@ -11,6 +12,62 @@ const GateManager = require('./rpg/dungeons/GateManager');
 const SeasonManager = require('./rpg/utils/SeasonManager');
 const Announcer = require('./rpg/utils/Announcer');
 const GuildWar = require('./commands/rpg/guildwar');
+
+// ── MongoDB setup ─────────────────────────────────────────────
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://botuser:botuser1234@cluster0.ttubqaz.mongodb.net/rpgbot?appName=Cluster0';
+let mongoClient = null;
+let mongoDb = null;
+let mongoCollection = null;
+
+async function connectMongo() {
+  try {
+    mongoClient = new MongoClient(MONGO_URI);
+    await mongoClient.connect();
+    mongoDb = mongoClient.db('rpgbot');
+    mongoCollection = mongoDb.collection('database');
+    console.log('✅ MongoDB connected successfully!');
+    return true;
+  } catch (err) {
+    console.error('❌ MongoDB connection failed:', err.message);
+    return false;
+  }
+}
+
+async function loadFromMongo() {
+  try {
+    const doc = await mongoCollection.findOne({ _id: 'main' });
+    if (doc) {
+      delete doc._id;
+      database = doc;
+      console.log(`✅ Database loaded from MongoDB (${Object.keys(database.users || {}).length} players)`);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('❌ MongoDB load failed:', err.message);
+    return false;
+  }
+}
+
+let saveTimeout = null;
+async function saveToMongo() {
+  if (!mongoCollection) return;
+  // Debounce — only save after 2 seconds of no changes
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    try {
+      await mongoCollection.replaceOne(
+        { _id: 'main' },
+        { _id: 'main', ...database },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.error('❌ MongoDB save failed:', err.message);
+      // Fallback to JSON
+      try { fs.writeFileSync(DB_PATH, JSON.stringify(database, null, 2)); } catch(e) {}
+    }
+  }, 2000);
+}
 
 // ── Persistent data paths ─────────────────────────────────────
 // On fly.io, mount a volume at /data. Locally, use the project folder.
@@ -245,21 +302,14 @@ const BACKUP_PATH = DB_PATH.replace('.json', '.backup.json');
 
 const getDatabase = () => database;
 const saveDatabase = () => {
+  // Save to MongoDB (primary)
+  saveToMongo();
+  // Also save to JSON as backup
   try {
-    // Backup current file before overwriting
-    if (fs.existsSync(DB_PATH)) {
-      fs.copyFileSync(DB_PATH, BACKUP_PATH);
-    }
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     fs.writeFileSync(DB_PATH, JSON.stringify(database, null, 2));
   } catch (error) {
-    console.error('❌ Error saving database:', error);
-    // Try writing to backup path if main fails
-    try {
-      fs.writeFileSync(BACKUP_PATH, JSON.stringify(database, null, 2));
-      console.log('⚠️ Saved to backup file instead.');
-    } catch (e2) {
-      console.error('❌ Backup save also failed:', e2);
-    }
+    console.error('❌ JSON backup save failed:', error.message);
   }
 };
 
@@ -801,8 +851,30 @@ Hey @${participant.split('@')[0]}! Here's how to get started 🎮
 // ========================================
 // INITIALIZE BOT
 // ========================================
-loadDatabase();
-connectToWhatsApp().catch(err => {
-  console.error('❌ Fatal error:', err);
-  process.exit(1);
-});
+// ── STARTUP ───────────────────────────────────────────────────
+async function startup() {
+  // 1. Connect to MongoDB
+  const mongoOk = await connectMongo();
+
+  // 2. Load database — try MongoDB first, fallback to JSON
+  if (mongoOk) {
+    const loaded = await loadFromMongo();
+    if (!loaded) {
+      // No data in MongoDB yet — load from JSON and migrate to MongoDB
+      loadDatabase();
+      await saveToMongo();
+      console.log('📦 Migrated existing JSON data to MongoDB!');
+    }
+  } else {
+    // MongoDB failed — use JSON file
+    loadDatabase();
+  }
+
+  // 3. Start WhatsApp bot
+  connectToWhatsApp().catch(err => {
+    console.error('❌ Fatal error:', err);
+    process.exit(1);
+  });
+}
+
+startup();

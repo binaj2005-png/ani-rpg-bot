@@ -147,8 +147,8 @@ module.exports = {
       if (db.soloDungeons && db.soloDungeons[sender]) {
         const sd = db.soloDungeons[sender];
         const monster = sd.currentMonster;
-        const hpBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 10, '🔴', '⬛');
-        const pHpBar = BarSystem.createBar(player.stats.hp, player.stats.maxHp, 10, '💚', '⬛');
+        const hpBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
+        const pHpBar = BarSystem.getHPBar(player.stats.hp, player.stats.maxHp);
         return sock.sendMessage(chatId, {
           text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ *SOLO DUNGEON IN PROGRESS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏰 ${sd.dungeonName} | Floor ${sd.currentFloor}/10\n\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n${hpBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n\n👤 *${player.name}*\n${pHpBar} ${player.stats.hp}/${player.stats.maxHp} HP\n\n/dungeon attack — Attack\n/dungeon use [skill] — Use skill\n/dungeon item hp — Use health potion\n/dungeon flee — Flee\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
         }, { quoted: msg });
@@ -175,10 +175,10 @@ module.exports = {
 
       // Spawn first monster (scaled easier for solo — 70% of normal stats)
       const monster = DungeonManager.getFloorMonster(dtype.id, 1, player.level);
-      monster.stats.hp = Math.floor(monster.stats.hp * 0.7);
+      monster.stats.hp = Math.floor(monster.stats.hp * 0.5);
       monster.stats.maxHp = monster.stats.hp;
-      monster.stats.atk = Math.floor(monster.stats.atk * 0.7);
-      monster.stats.def = Math.floor(monster.stats.def * 0.7);
+      monster.stats.atk = Math.floor(monster.stats.atk * 0.5);
+      monster.stats.def = Math.floor(monster.stats.def * 0.5);
 
       if (!db.soloDungeons) db.soloDungeons = {};
       db.soloDungeons[sender] = {
@@ -194,7 +194,7 @@ module.exports = {
       };
       saveDatabase();
 
-      const hpBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 10, '🔴', '⬛');
+      const hpBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
       return sock.sendMessage(chatId, {
         text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${dtype.emoji} *${dtype.name.toUpperCase()} — SOLO*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👤 Solo run | 10 Floors | Bosses at F5, F10\n⚠️ Monsters scaled to your level\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔽 *FLOOR 1*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n${hpBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n⚡ /dungeon use [skill]\n🎒 /dungeon item hp\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
       }, { quoted: msg });
@@ -270,7 +270,7 @@ module.exports = {
       let txt = `✅ *${player.name}* is ready!\n\n`;
       party.members.forEach(m => { txt += `  ${m.ready ? '✅' : '⏳'} ${m.name}\n`; });
       if (allReady && party.members.length >= 2) txt += `\n🎉 *ALL READY!* Leader: /dungeon start\n/dungeon types to see options`;
-      else if (party.members.length < 2)         txt += `\n⚠️ Need at least 2 hunters!`;
+      else if (party.members.length < 1)         txt += `\n✅ You can start solo or invite friends!`;
       return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
     }
 
@@ -319,7 +319,7 @@ module.exports = {
       if (party.status === 'active') return sock.sendMessage(chatId, { text: '❌ Dungeon already in progress!' }, { quoted: msg });
       if (party.leader !== sender) return sock.sendMessage(chatId, { text: '❌ Only the party leader can start!' }, { quoted: msg });
       if (!DungeonPartyManager.allReady(party.id)) return sock.sendMessage(chatId, { text: '❌ Not all members ready!\nEveryone: /dungeon ready' }, { quoted: msg });
-      if (party.members.length < 2) return sock.sendMessage(chatId, { text: '❌ Need at least 2 hunters!\nShare party ID: ' + party.id }, { quoted: msg });
+      if (party.members.length < 1) return sock.sendMessage(chatId, { text: '❌ No members in party!' }, { quoted: msg });
 
       const members    = party.members.map(m => db.users[m.id]).filter(u => u);
       const avgLevel   = Math.floor(members.reduce((s,m) => s + m.level, 0) / members.length);
@@ -425,17 +425,17 @@ module.exports = {
           : DungeonManager.getFloorMonster(sd.dungeonTypeId, nextFloor, player.level);
 
         // Scale down for solo
-        monster.stats.hp = Math.floor(monster.stats.hp * 0.7);
+        monster.stats.hp = Math.floor(monster.stats.hp * 0.5);
         monster.stats.maxHp = monster.stats.hp;
-        monster.stats.atk = Math.floor(monster.stats.atk * 0.7);
-        monster.stats.def = Math.floor(monster.stats.def * 0.7);
+        monster.stats.atk = Math.floor(monster.stats.atk * 0.5);
+        monster.stats.def = Math.floor(monster.stats.def * 0.5);
 
         sd.currentFloor = nextFloor;
         sd.currentMonster = monster;
         sd.awaitingAdvance = false;
         saveDatabase();
 
-        const mBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 10, '🔴', '⬛');
+        const mBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
         let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         txt += isBoss ? `⚠️ *BOSS — FLOOR ${nextFloor}!*\n` : `🔽 *FLOOR ${nextFloor}*\n`;
         txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]${isBoss ? ' 🔴 BOSS' : ''}\n${mBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ /dungeon attack\n🎒 /dungeon item hp`;
@@ -584,8 +584,8 @@ module.exports = {
 
         log += `\n💢 *${monster.name}* strikes back! -${monDmg} HP!\n`;
 
-        const mHpBar = BarSystem.createBar(monster.stats.hp, monster.stats.maxHp, 8, '🔴', '⬛');
-        const pHpBar = BarSystem.createBar(player.stats.hp, player.stats.maxHp, 8, '💚', '⬛');
+        const mHpBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
+        const pHpBar = BarSystem.getHPBar(player.stats.hp, player.stats.maxHp);
         log += `\n${monster.emoji} ${mHpBar} ${monster.stats.hp}/${monster.stats.maxHp}\n👤 ${pHpBar} ${player.stats.hp}/${player.stats.maxHp}`;
 
         if (player.stats.hp <= 0) {

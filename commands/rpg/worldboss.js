@@ -22,11 +22,26 @@ let TitleSystem; try { TitleSystem = require('../../rpg/utils/TitleSystem'); } c
 // ═══════════════════════════════════════════════════════════════
 const WORLD_BOSSES = [
   {
+    id: 'forest_hydra',
+    name: 'Forest Hydra',
+    emoji: '🐍',
+    minLevel: 1,
+    minParty: 1, maxParty: 5,
+    description: 'A three-headed hydra lurking in the forest. Cut one head off and two more grow back.',
+    baseMult: 0.4,
+    phases: [
+      { threshold: 1.0, name: 'Lurking',    atkMult: 1.0,  msg: '🐍 The Forest Hydra bursts from the trees! Three heads hiss at once!' },
+      { threshold: 0.6, name: 'Regrowing',  atkMult: 1.3,  msg: '🐍 PHASE 2: You cut a head off — two more grow back! It\'s getting stronger!' },
+      { threshold: 0.3, name: 'Frenzy',     atkMult: 1.6,  msg: '💀 FINAL PHASE: All heads attacking at once! The forest shakes with each strike!' }
+    ],
+    abilities: ['Triple Bite', 'Acid Spit', 'Coil Crush', 'Regen']
+  },
+  {
     id: 'titan_kraken',
     name: 'Titan Kraken',
     emoji: '🐙',
-    minLevel: 15,
-    minParty: 2, maxParty: 5,
+    minLevel: 10,
+    minParty: 1, maxParty: 5,
     description: 'A kraken the size of an island. It has pulled entire fleets into the deep.',
     baseMult: 1.0,
     phases: [
@@ -40,8 +55,8 @@ const WORLD_BOSSES = [
     id: 'ancient_lich',
     name: 'Ancient Lich',
     emoji: '💀',
-    minLevel: 20,
-    minParty: 2, maxParty: 5,
+    minLevel: 15,
+    minParty: 1, maxParty: 5,
     description: 'An immortal sorcerer ten thousand years old. He has killed everyone who challenged him.',
     baseMult: 1.1,
     phases: [
@@ -56,7 +71,7 @@ const WORLD_BOSSES = [
     name: 'Dragon Emperor',
     emoji: '🐉',
     minLevel: 30,
-    minParty: 2, maxParty: 5,
+    minParty: 1, maxParty: 5,
     description: 'The emperor of all dragons. To challenge him is to challenge dragonkind itself.',
     baseMult: 1.25,
     phases: [
@@ -71,7 +86,7 @@ const WORLD_BOSSES = [
     name: 'The Shadow God',
     emoji: '🌑',
     minLevel: 40,
-    minParty: 2, maxParty: 5,
+    minParty: 1, maxParty: 5,
     description: 'A deity of pure darkness. It is not evil — it is simply the end of all things.',
     baseMult: 1.5,
     phases: [
@@ -86,7 +101,7 @@ const WORLD_BOSSES = [
     name: 'Chaos Titan',
     emoji: '💥',
     minLevel: 50,
-    minParty: 3, maxParty: 5,
+    minParty: 1, maxParty: 5,
     description: 'A being born from the collapse of a universe. It has no goals. It simply destroys.',
     baseMult: 2.0,
     phases: [
@@ -151,12 +166,12 @@ const WorldBossParties = {
 // ═══════════════════════════════════════════════════════════════
 function generateBoss(bossDef, avgLevel, partySize) {
   const levelMult = 1 + (avgLevel - 1) * 0.08;
-  const partyMult = 1 + (partySize - 2) * 0.4; // +40% HP/ATK per extra member
+  const partyMult = Math.max(0.5, 1 + (partySize - 1) * 0.3); // +40% HP/ATK per extra member
   const base      = bossDef.baseMult;
 
-  const hp  = Math.floor(60000  * levelMult * partyMult * base);
-  const atk = Math.floor(3000   * levelMult * partyMult * base);
-  const def = Math.floor(1800   * levelMult * partyMult * base);
+  const hp  = Math.floor(15000 * levelMult * partyMult * base);
+  const atk = Math.floor(800 * levelMult * partyMult * base);
+  const def = Math.floor(400 * levelMult * partyMult * base);
 
   return {
     id:    bossDef.id,
@@ -277,7 +292,7 @@ module.exports = {
 
       let txt = `✅ *${player.name}* is ready!\n\n👥 Party Status:\n`;
       party.members.forEach(m => { txt += `  ${m.ready ? '✅' : '⏳'} ${m.name}\n`; });
-      if (allReady && party.members.length >= (bossDef?.minParty || 2)) {
+      if (allReady && party.members.length >= (bossDef?.minParty || 1)) {
         txt += `\n🎉 *ALL READY!*\nLeader can start: /worldboss start`;
       } else if (allReady) {
         txt += `\n⚠️ Need at least ${bossDef?.minParty || 2} hunters! (Have ${party.members.length})`;
@@ -339,7 +354,7 @@ module.exports = {
 
       const bossDef = WORLD_BOSSES.find(b => b.id === party.bossId);
       if (!bossDef) return sock.sendMessage(chatId, { text: '❌ Boss not found!' }, { quoted: msg });
-      if (party.members.length < (bossDef.minParty || 2)) {
+      if (party.members.length < (bossDef.minParty || 1)) {
         return sock.sendMessage(chatId, { text: `❌ Need at least ${bossDef.minParty} hunters! (Have ${party.members.length})\nShare party ID: ${party.id}` }, { quoted: msg });
       }
       if (!party.members.every(m => m.ready)) {

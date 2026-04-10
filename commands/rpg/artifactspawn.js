@@ -159,8 +159,6 @@ async function handleClaim(sock, msg, args, getDatabase, saveDatabase, sender) {
   if (!player) return sock.sendMessage(chatId, { text: '❌ Register first! /register' }, { quoted: msg });
 
   // ── LUCK CHECK ──────────────────────────────────────────────
-  // Base claim = first to type it. Luck potion gives a small advantage hint only.
-  // Main mechanic: raw speed (first typer wins).
   const hasLuckPotion = (player.inventory?.items || []).some(i => i.isLuckPotion);
   const luckBonus     = hasLuckPotion ? ' 🍀 *[LUCK POTION ACTIVE]*' : '';
 
@@ -169,25 +167,36 @@ async function handleClaim(sock, msg, args, getDatabase, saveDatabase, sender) {
   spawn.claimedBy = sender;
   activeSpawns.delete(chatId);
 
-  // Give artifact to player
-  if (!player.artifacts) {
-    player.artifacts = { inventory: [], equipped: { weapon: null, armor: null, helmet: null, gloves: null, ring: null, amulet: null, tome: null } };
-  }
-  if (!player.artifacts.inventory) player.artifacts.inventory = [];
-
   const art = spawn.artifact;
 
-  // Store as full artifact object
-  player.artifacts.inventory.push({
-    name:   art.name,
-    emoji:  art.emoji,
-    rarity: art.rarity,
-    type:   art.type,
-    bonus:  { ...art.bonus },
-    desc:   art.desc,
-    from:   'group_spawn',
-    obtained: Date.now()
-  });
+  // ── SAVE TO ARTIFACT INVENTORY ─────────────────────────────
+  // Register artifact in ArtifactSystem so it can be used with /artifact commands
+  try {
+    const ArtifactSystem = require('../../rpg/utils/ArtifactSystem');
+    if (!ArtifactSystem.getArtifact(art.name)) {
+      // Register it dynamically
+      ArtifactSystem.ARTIFACT_DATABASE[art.name] = {
+        name:        art.name,
+        emoji:       art.emoji,
+        rarity:      art.rarity,
+        type:        art.type,
+        description: art.desc,
+        bonuses:     art.bonus,
+        requirements: {},
+      };
+    }
+  } catch(e) {}
+
+  // Initialize artifact inventory if needed
+  if (!player.artifacts || typeof player.artifacts !== 'object' || Array.isArray(player.artifacts)) {
+    player.artifacts = { inventory: [], equipped: { weapon: null, armor: null, helmet: null, gloves: null, ring: null, amulet: null, tome: null }, enhanced: {} };
+  }
+  if (!player.artifacts.inventory) player.artifacts.inventory = [];
+  if (!player.artifacts.equipped) player.artifacts.equipped = { weapon: null, armor: null, helmet: null, gloves: null, ring: null, amulet: null, tome: null };
+  if (!player.artifacts.enhanced) player.artifacts.enhanced = {};
+
+  // Save artifact name as string (compatible with /artifact commands)
+  player.artifacts.inventory.push(art.name);
 
   // Consume luck potion if used
   if (hasLuckPotion) {
