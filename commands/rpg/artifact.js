@@ -211,8 +211,27 @@ module.exports = {
       }
 
       // Equip new artifact
+      // Unequip old artifact stats first
+      if (player.artifacts.equipped[slot]) {
+        const oldName = player.artifacts.equipped[slot];
+        const oldArt = Array.isArray(player.artifacts.inventory) 
+          ? null  // already moved back above
+          : null;
+        // We'll recalculate on next combat via getEquippedArtifactStats
+      }
+      
       player.artifacts.equipped[slot] = artifactName;
       player.artifacts.inventory.splice(index, 1);
+
+      // Apply maxHp bonus immediately so player sees it
+      const artStats = artifact.stats || artifact.bonus || {};
+      if (artStats.hp || artStats.maxHp) {
+        const hpBonus = artStats.hp || artStats.maxHp || 0;
+        const enh = player.artifacts?.enhanced?.[artifactName] || 0;
+        const finalHp = enh > 0 ? Math.floor(hpBonus * (1 + enh * 0.1)) : hpBonus;
+        player.stats.maxHp = (player.stats.maxHp || 0) + finalHp;
+        player.stats.hp = Math.min(player.stats.maxHp, (player.stats.hp || 0) + finalHp);
+      }
 
       saveDatabase();
 

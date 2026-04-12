@@ -1,4 +1,6 @@
 const StatusEffectManager = require('../../rpg/utils/StatusEffectManager');
+let BuffManager; try { BuffManager = require('../../rpg/utils/BuffManager'); } catch(e) {}
+let ArtifactSystem; try { ArtifactSystem = require('../../rpg/utils/ArtifactSystem'); } catch(e) {}
 const BP = require('../../rpg/utils/BattlePass');
 let TitleSystem; try { TitleSystem = require('../../rpg/utils/TitleSystem'); } catch(e) {}
 let CS; try { CS = require('../../rpg/utils/ConstellationSystem'); } catch(e) {}
@@ -1296,8 +1298,11 @@ async function handleVictory(sock, chatId, winner, loser, wId, lId, db, save, wS
   winner.pvpStreak=(winner.pvpStreak||0)+1;
   loser.pvpStreak=0;
 
+  // Apply artifact bonuses to winner's effective stats for this calculation
+  const _w_artBonus = ArtifactSystem?.getEquippedArtifactStats ? ArtifactSystem.getEquippedArtifactStats(winner) : {};
+  const _l_artBonus = ArtifactSystem?.getEquippedArtifactStats ? ArtifactSystem.getEquippedArtifactStats(loser) : {};
   const baseGold=800+Math.floor(loser.level*50)+(winner.pvpStreak>=3?200:0);
-  const baseXP=300+(loser.level*20);
+  const baseXP=500+(loser.level*30);
 
   // ── Apply seasonal event bonuses (#3) ──────────────────────
   let finalGold = baseGold;
@@ -1317,6 +1322,13 @@ async function handleVictory(sock, chatId, winner, loser, wId, lId, db, save, wS
 
   const streakBonus=winner.pvpStreak>=5?`\n🔥 *${winner.pvpStreak}-WIN STREAK!* +50g`:winner.pvpStreak>=3?`\n🔥 Win Streak ×${winner.pvpStreak}! +50g`:'';
 
+  // Apply shop buffs
+  if (BuffManager) {
+    const xpMult = BuffManager.getXpMultiplier(winner);
+    const goldMult = BuffManager.getGoldMultiplier(winner);
+    finalXP = Math.floor(finalXP * xpMult);
+    finalGold = Math.floor(finalGold * goldMult);
+  }
   winner.gold=(winner.gold||0)+finalGold;
   winner.xp=(winner.xp||0)+finalXP;
   LevelUpManager.checkAndApplyLevelUps(winner,save,sock,chatId);

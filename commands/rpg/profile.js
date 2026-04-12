@@ -1,3 +1,4 @@
+let ArtifactSystem; try { ArtifactSystem = require('../../rpg/utils/ArtifactSystem'); } catch(e) {}
 const PlayerMigration = require('../../rpg/utils/PlayerMigration');
 const ProfileCard     = require('../../rpg/utils/ProfileCard');
 let AchievementManager; try { AchievementManager = require('../../rpg/utils/AchievementManager'); } catch(e) {}
@@ -92,9 +93,10 @@ ${className} | Lv.${lvl} | Rank ${player.rank||'F'}
 
 ❤️ HP  ${bar(stats.hp||0, stats.maxHp||100)} ${stats.hp||0}/${stats.maxHp||100}
 ⚡ EN  ${bar(stats.energy||0, stats.maxEnergy||100)} ${stats.energy||0}/${stats.maxEnergy||100}
-✨ XP  ${bar(player.xp||0, xpNeeded)} ${xpPct}%
+✨ XP  ${bar(player.xp||0, xpNeeded)} ${(player.xp||0).toLocaleString()}/${xpNeeded.toLocaleString()} (${xpPct}% to Lv.${lvl+1})
 
-⚔️ ATK: ${stats.atk||0}  🛡️ DEF: ${stats.def||0}  💨 SPD: ${stats.speed||0}
+⚔️ ATK: ${(stats.atk||0) + (player.weapon?.bonus||0) + (ArtifactSystem?.getEquippedArtifactStats?.(player)?.atk||0)}  🛡️ DEF: ${(stats.def||0) + (ArtifactSystem?.getEquippedArtifactStats?.(player)?.def||0)}  💨 SPD: ${stats.speed||0}
+🗡️ Weapon: ${player.weapon?.name || 'None'}  💥 Crit: ${stats.critChance||5}%
 
 💰 Gold: ${(player.gold||0).toLocaleString()}
 💎 Crystals: ${(player.manaCrystals||0).toLocaleString()}

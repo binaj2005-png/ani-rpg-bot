@@ -557,6 +557,23 @@ if (chatId.endsWith('@g.us')) {
   // ────────────────────────────────────────────────────────────────────────────
 
   // ⭐ Execute command — wrap sock so long messages auto-chunk
+  // ── TUTORIAL INTERCEPTION ─────────────────────────────────
+  // If player is in tutorial, route all commands through tutorial handler
+  try {
+    const Tutorial = require('../commands/rpg/tutorial');
+    if (Tutorial.isInTutorial(sender) && resolvedCommand !== 'tutorial') {
+      // Still let some commands through
+      const allowedDuringTutorial = ['help', 'profile', 'stats', 'tutorial'];
+      if (!allowedDuringTutorial.includes(resolvedCommand)) {
+        return sock.sendMessage(chatId, {
+          text: `⚔️ *Tutorial in progress!*\n\n👇 */tutorial attack* — Attack\n👇 */tutorial skill* — Use skill\n👇 */tutorial advance* — Next floor\n\nFinish the tutorial first!`,
+          mentions: [sender]
+        }, { quoted: msg });
+      }
+    }
+  } catch(e) {}
+  // ─────────────────────────────────────────────────────────
+
   if (commands[resolvedCommand] && typeof commands[resolvedCommand].execute === 'function') {
     // Proxy sock.sendMessage so any text > 3500 chars gets split automatically
     const chunkedSock = new Proxy(sock, {
@@ -596,12 +613,33 @@ if (chatId.endsWith('@g.us')) {
       );
     }
   } else {
+    // Suggest closest command
+    const allCmds = Object.keys(commands);
+    let bestMatch = null;
+    let bestScore = 0;
+    if (commandName && commandName.length > 1) {
+      for (const cmd of allCmds) {
+        let score = 0;
+        const a = commandName.toLowerCase();
+        const b = cmd.toLowerCase();
+        // Common prefix
+        for (let i = 0; i < Math.min(a.length, b.length); i++) {
+          if (a[i] === b[i]) score += 2; else break;
+        }
+        // Shared characters
+        for (const ch of a) if (b.includes(ch)) score++;
+        // Length similarity
+        score -= Math.abs(a.length - b.length);
+        if (score > bestScore) { bestScore = score; bestMatch = cmd; }
+      }
+    }
+    const suggestion = bestMatch && bestScore > 2
+      ? `\n\n🤔 Did you mean *${config.prefix}${bestMatch}*?`
+      : `\n\nUse *${config.prefix}help* to see all commands.`;
     await sock.sendMessage(
       chatId,
       {
-        text:
-          `❌ Unknown command: *${commandName}*\n\n` +
-          `Use *${config.prefix}help* to see available commands.`,
+        text: `❌ No such command: *${config.prefix}${commandName}*${suggestion}`,
       },
       { quoted: msg }
     );

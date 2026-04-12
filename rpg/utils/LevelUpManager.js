@@ -22,6 +22,25 @@ class LevelUpManager {
 
       if (player.xp >= xpNeeded) {
         player.level++;
+    
+    // ── Unlock skills at certain levels ──────────────────────
+    const locked = player.skills?.locked || [];
+    const newlyUnlocked = [];
+    for (const skill of locked) {
+      if ((skill.unlocksAtLevel || 999) <= player.level) {
+        newlyUnlocked.push(skill);
+      }
+    }
+    if (newlyUnlocked.length > 0) {
+      if (!player.skills.active) player.skills.active = [];
+      for (const skill of newlyUnlocked) {
+        player.skills.active.push({...skill});
+        const idx = player.skills.locked.findIndex(s => s.name === skill.name);
+        if (idx >= 0) player.skills.locked.splice(idx, 1);
+      }
+      if (!player._newSkillsUnlocked) player._newSkillsUnlocked = [];
+      player._newSkillsUnlocked.push(...newlyUnlocked.map(s => s.name));
+    }
         player.xp -= xpNeeded;
 
         // Increase stats — write to BOTH stats and baseStats so that

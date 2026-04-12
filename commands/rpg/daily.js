@@ -39,7 +39,7 @@ function getBaseReward(streak) {
   return {
     gold:     2000 + tier * 300,
     crystals: 5  + tier * 1,
-    xp:       100 + tier * 20
+    xp:       300 + tier * 50
   };
 }
 

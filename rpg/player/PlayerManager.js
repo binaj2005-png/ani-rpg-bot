@@ -663,11 +663,11 @@ const classDefinitions = {
       { level: 50, name: '10 Billion% Catalyst', bonus: 75 },
     ],
     skills: [
-      { name: 'Nitro Burst',     damage: 65, energyCost: 28, cooldown: 12, level: 1, maxLevel: 5, effect: { type: 'burn',      chance: 0.6,  duration: 3 } },
-      { name: '10 Billion%',     damage: 80, energyCost: 35, cooldown: 15, level: 1, maxLevel: 5, effect: { type: 'stun',      chance: 0.5,  duration: 2 } },
-      { name: 'Stone Formula',   damage: 55, energyCost: 22, cooldown: 10, level: 1, maxLevel: 5, effect: { type: 'freeze',    chance: 0.55, duration: 3 } },
-      { name: 'Revival Serum',   damage: 0,  energyCost: 30, cooldown: 18, level: 1, maxLevel: 5, effect: { type: 'lifesteal', percent: 0.75 } },
-      { name: 'Senku Overdrive', damage: 95, energyCost: 45, cooldown: 20, level: 1, maxLevel: 5, effect: { type: 'bleed',     chance: 0.7,  duration: 4 } }
+      { name: 'Nitro Burst',     damage: 65, energyCost: 28, cooldown: 12, level: 1, maxLevel: 5, unlocksAtLevel: 1,  effect: { type: 'burn',      chance: 0.6,  duration: 3 } },
+      { name: '10 Billion%',     damage: 80, energyCost: 35, cooldown: 15, level: 1, maxLevel: 5, unlocksAtLevel: 5,  effect: { type: 'stun',      chance: 0.5,  duration: 2 } },
+      { name: 'Stone Formula',   damage: 55, energyCost: 22, cooldown: 10, level: 1, maxLevel: 5, unlocksAtLevel: 10, effect: { type: 'freeze',    chance: 0.55, duration: 3 } },
+      { name: 'Revival Serum',   damage: 0,  energyCost: 30, cooldown: 18, level: 1, maxLevel: 5, unlocksAtLevel: 20, effect: { type: 'lifesteal', percent: 0.75 } },
+      { name: 'Senku Overdrive', damage: 95, energyCost: 45, cooldown: 20, level: 1, maxLevel: 5, unlocksAtLevel: 30, effect: { type: 'bleed',     chance: 0.7,  duration: 4 } }
     ],
     passive: [
       { name: 'Scientific Genius',    effect: '+40% Skill Damage' },
@@ -706,8 +706,7 @@ class PlayerManager {
   }
 
   static rollRandomClass(userId) {
-    // Owner always gets Senku (divine, exclusive)
-    if (userId === '221951679328499@lid') return 'Senku';
+    // All users get random class — owner is normal player
 
     // Co-owner always gets Berserker
     if (userId === '194592469209292@lid') return 'Berserker';
@@ -766,7 +765,8 @@ class PlayerManager {
       energyColor: classDef.energyColor,
       weapon: { ...classDef.weapon },
       skills: {
-        active: classDef.skills.map(s => ({...s})),
+        active: classDef.skills.filter(s => (s.unlocksAtLevel || 1) <= 1).map(s => ({...s})),
+        locked: classDef.skills.filter(s => (s.unlocksAtLevel || 1) > 1).map(s => ({...s})),
         passive: classDef.passive ? classDef.passive.map(p => ({...p})) : [],
         ultimate: null
       },

@@ -1,3 +1,41 @@
+// ── Fix skills for existing players — add locked skills they're missing ──
+function migrateSkills(player) {
+  try {
+    const className = typeof player.class === 'string' ? player.class : player.class?.name;
+    if (!className) return;
+    
+    const { classDefinitions } = require('../player/PlayerManager');
+    const classDef = classDefinitions[className];
+    if (!classDef?.skills) return;
+    
+    if (!player.skills) player.skills = { active: [], locked: [], library: [], passive: [] };
+    if (!player.skills.active) player.skills.active = [];
+    if (!player.skills.locked) player.skills.locked = [];
+    if (!player.skills.library) player.skills.library = [];
+    
+    const playerLevel = player.level || 1;
+    
+    for (const skill of classDef.skills) {
+      const unlockLevel = skill.unlocksAtLevel || 1;
+      const hasSkill = 
+        player.skills.active.some(s => s.name === skill.name) ||
+        player.skills.library.some(s => s.name === skill.name) ||
+        player.skills.locked.some(s => s.name === skill.name);
+      
+      if (!hasSkill) {
+        if (unlockLevel <= playerLevel) {
+          // Player should have this skill already — add to library
+          player.skills.library.push({...skill});
+        } else {
+          // Not unlocked yet — add to locked
+          player.skills.locked.push({...skill});
+        }
+      }
+    }
+  } catch(e) {
+    // Silent fail
+  }
+}
 const PlayerManager = require('../player/PlayerManager');
 
 function migratePlayer(player) {
@@ -124,6 +162,7 @@ function migratePlayer(player) {
 
   console.log(`✅ Migrated ${player.name}: ${player.energyType} (${player.stats.energy}/${player.stats.maxEnergy})`);
 
+  migrateSkills(player);
   return player;
 }
 

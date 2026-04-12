@@ -363,7 +363,10 @@ module.exports = {
 
     const rewards = result.quest?.rewards;
     if (rewards) {
-      if (rewards.exp)     message += `⭐ +${rewards.exp} EXP\n`;
+      if (rewards.exp) {
+        player.xp = (player.xp || 0) + rewards.exp;
+        message += `⭐ +${rewards.exp} EXP\n`;
+      }
       if (rewards.gold)    message += `💰 +${rewards.gold.toLocaleString()} Gold\n`;
       if (rewards.crystals) message += `💎 +${rewards.crystals} Crystals\n`;
       if (rewards.items?.length > 0) {

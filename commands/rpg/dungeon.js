@@ -9,6 +9,8 @@ let TitleSystem; try { TitleSystem = require('../../rpg/utils/TitleSystem'); } c
 let DC; try { DC = require('../../rpg/utils/DailyChallenges'); } catch(e) {}
 const DungeonPartyManager = require('../../rpg/dungeons/DungeonPartyManager');
 const ImprovedCombat    = require('../../rpg/utils/ImprovedCombat');
+let BuffManager; try { BuffManager = require('../../rpg/utils/BuffManager'); } catch(e) {}
+let ArtifactSystem; try { ArtifactSystem = require('../../rpg/utils/ArtifactSystem'); } catch(e) {}
 const StatusEffectManager = require('../../rpg/utils/StatusEffectManager');
 const BarSystem         = require('../../rpg/utils/BarSystem');
 const LevelUpManager    = require('../../rpg/utils/LevelUpManager');
@@ -150,7 +152,7 @@ module.exports = {
         const hpBar = BarSystem.getMonsterHPBar(monster.stats.hp, monster.stats.maxHp);
         const pHpBar = BarSystem.getHPBar(player.stats.hp, player.stats.maxHp);
         return sock.sendMessage(chatId, {
-          text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ *SOLO DUNGEON IN PROGRESS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏰 ${sd.dungeonName} | Floor ${sd.currentFloor}/10\n\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n${hpBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n\n👤 *${player.name}*\n${pHpBar} ${player.stats.hp}/${player.stats.maxHp} HP\n\n/dungeon attack — Attack\n/dungeon use [skill] — Use skill\n/dungeon item hp — Use health potion\n/dungeon flee — Flee\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+          text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚔️ *SOLO DUNGEON IN PROGRESS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏰 ${sd.dungeonName} | Floor ${sd.currentFloor}/10\n💰 Earned so far: ${(sd.totalGold||0).toLocaleString()}g | ✨ ${(sd.totalXp||0).toLocaleString()} XP\n\n${monster.emoji} *${monster.name}* [Lv.${monster.level}]\n${hpBar} ${monster.stats.hp}/${monster.stats.maxHp} HP\n⚔️ ATK: ${monster.stats.atk} | 🛡️ DEF: ${monster.stats.def}\n\n👤 *${player.name}*\n${pHpBar} ${player.stats.hp}/${player.stats.maxHp} HP\n\n/dungeon attack — Attack\n/dungeon use [skill] — Use skill\n/dungeon item hp — Use health potion\n/dungeon flee — Flee\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
         }, { quoted: msg });
       }
 
@@ -414,8 +416,10 @@ module.exports = {
           player.xp = (player.xp || 0) + sd.totalXp;
           player.gold = (player.gold || 0) + sd.totalGold;
           player.manaCrystals = (player.manaCrystals || 0) + sd.totalCrystals;
+          try { require('../../rpg/utils/BattlePass').addPassXP(player, 'dungeon_clear'); } catch(e) {}
           delete db.soloDungeons[sender];
           saveDatabase();
+          LevelUpManager.checkAndApplyLevelUps(player, saveDatabase, sock, chatId);
           return sock.sendMessage(chatId, {
             text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏆 *SOLO DUNGEON COMPLETE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ All 10 floors cleared!\n\n📊 *TOTAL REWARDS:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💪 Well done, solo hunter!`
           }, { quoted: msg });
@@ -501,6 +505,7 @@ module.exports = {
         player.manaCrystals = (player.manaCrystals || 0) + sd.totalCrystals;
         delete db.soloDungeons[sender];
         saveDatabase();
+        LevelUpManager.checkAndApplyLevelUps(player, saveDatabase, sock, chatId);
         return sock.sendMessage(chatId, {
           text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🚪 *EXITED SOLO DUNGEON*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nCleared ${sd.currentFloor - 1} floor(s)\n\n📦 *REWARDS KEPT:*\n✨ XP: +${sd.totalXp.toLocaleString()}\n💰 Gold: +${sd.totalGold.toLocaleString()}\n💎 Crystals: +${sd.totalCrystals}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
         }, { quoted: msg });
@@ -558,7 +563,7 @@ module.exports = {
         let consAtkSolo = 0;
         try { const CS=require('../../rpg/utils/ConstellationSystem'); consAtkSolo=CS.getSponsorBonus(player).atk||0; } catch(e) {}
         const effAtkSolo = Math.floor((player.stats.atk + weapAtkSolo + artAtkSolo + petAtkSolo + consAtkSolo) * modsSolo.atkMod);
-        const isCritSolo = Math.random() < (0.10 + (player.statAllocations?.critChance || 0) * 0.005);
+        const isCritSolo = Math.random() < ((player.stats.critChance || 10) / 100);
         const critMSolo  = 1.5 + (player.statAllocations?.critDamage || 0) * 0.01;
         const playerDmg  = Math.max(1, Math.floor(effAtkSolo * (isCritSolo ? critMSolo : 1.0)) - Math.floor(monster.stats.def * 0.4));
 
@@ -581,9 +586,9 @@ module.exports = {
           // Monster defeated
           const isBossSolo = sd.currentFloor % 5 === 0;
           const rewards = DungeonManager.getFloorRewards(sd.currentFloor, player.level, isBossSolo);
-          const xpGain      = Math.floor(rewards.xp * 0.6);
-          const goldGain    = Math.floor(rewards.gold * 0.6);
-          const crystalGain = Math.floor((rewards.crystals || 0) * 0.6);
+          const xpGain      = Math.floor(rewards.xp);
+          const goldGain    = Math.floor(rewards.gold);
+          const crystalGain = Math.floor(rewards.crystals || 0);
 
           sd.totalXp      += xpGain;
           sd.totalGold    += goldGain;
@@ -595,8 +600,14 @@ module.exports = {
           if (isBossSolo) log += `\n👹 *BOSS DEFEATED!* You earned bonus rewards!`;
 
           if (sd.currentFloor >= sd.maxFloors) {
-            player.xp           = (player.xp           || 0) + sd.totalXp;
+            // Apply buff multipliers
+          if (BuffManager) {
+            sd.totalXp   = Math.floor(sd.totalXp   * (BuffManager.getXpMultiplier(player)   || 1));
+            sd.totalGold = Math.floor(sd.totalGold * (BuffManager.getGoldMultiplier(player) || 1));
+          }
+          player.xp           = (player.xp           || 0) + sd.totalXp;
             player.gold         = (player.gold          || 0) + sd.totalGold;
+            try { const BP2=require('../../rpg/utils/BattlePass'); BP2.addPassXP(player,'dungeon_clear'); } catch(e) {}
             player.manaCrystals = (player.manaCrystals  || 0) + sd.totalCrystals;
             delete db.soloDungeons[sender];
             saveDatabase();
@@ -727,7 +738,15 @@ module.exports = {
         if (!fx.canAct) { log += `❌ ${player.name} cannot act!`; return sock.sendMessage(chatId, { text: log }, { quoted: msg }); }
 
         const className = typeof player.class === 'string' ? player.class : player.class?.name || 'Warrior';
-        const pEnt = { name: player.name, stats: player.stats, skills: player.skills, class: { name: className }, energyType: player.energyType || 'Energy', statusEffects: player.statusEffects || [] };
+        // Build player entity with artifact bonuses applied
+        const _artStats = ArtifactSystem?.getEquippedArtifactStats ? ArtifactSystem.getEquippedArtifactStats(player) : {};
+        const _atkBoost = BuffManager?.getAtkBoost ? BuffManager.getAtkBoost(player) : 0;
+        const pStats = { ...player.stats,
+          atk: (player.stats.atk || 0) + (_artStats.atk || 0) + _atkBoost,
+          def: (player.stats.def || 0) + (_artStats.def || 0),
+          critChance: (player.stats.critChance || 0) + (_artStats.critChance || 0)
+        };
+        const pEnt = { name: player.name, stats: pStats, skills: player.skills, class: { name: className }, energyType: player.energyType || 'Energy', statusEffects: player.statusEffects || [], weapon: player.weapon };
         const mEnt = { name: monster.name, stats: monster.stats, skills: {}, abilities: monster.abilities || [], statusEffects: monster.statusEffects || [] };
 
         const result = ImprovedCombat.executeSkill(pEnt, mEnt, skillName);
@@ -746,17 +765,23 @@ module.exports = {
         if (monster.stats.hp <= 0) {
           const isBossSk = sd.currentFloor % 5 === 0;
           const rewards  = DungeonManager.getFloorRewards(sd.currentFloor, player.level, isBossSk);
-          const xpGain   = Math.floor(rewards.xp * 0.6);
-          const goldGain = Math.floor(rewards.gold * 0.6);
-          const crysGain = Math.floor((rewards.crystals || 0) * 0.6);
+          const xpGain   = Math.floor(rewards.xp);
+          const goldGain = Math.floor(rewards.gold);
+          const crysGain = Math.floor(rewards.crystals || 0);
           sd.totalXp += xpGain; sd.totalGold += goldGain; sd.totalCrystals += crysGain;
 
           log += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💀 *${monster.name}* has been defeated!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
           log += `✨ +${xpGain} XP | 💰 +${goldGain} Gold | 💎 +${crysGain} Crystals\n`;
+          log += `💰 *Total earned this run: ${sd.totalGold.toLocaleString()}g*\n`;
           if (isBossSk) log += `\n👹 *BOSS DEFEATED!* Bonus rewards earned!`;
 
           if (sd.currentFloor >= sd.maxFloors) {
-            player.xp           = (player.xp           || 0) + sd.totalXp;
+            // Apply buff multipliers
+          if (BuffManager) {
+            sd.totalXp   = Math.floor(sd.totalXp   * (BuffManager.getXpMultiplier(player)   || 1));
+            sd.totalGold = Math.floor(sd.totalGold * (BuffManager.getGoldMultiplier(player) || 1));
+          }
+          player.xp           = (player.xp           || 0) + sd.totalXp;
             player.gold         = (player.gold          || 0) + sd.totalGold;
             player.manaCrystals = (player.manaCrystals  || 0) + sd.totalCrystals;
             delete db.soloDungeons[sender];

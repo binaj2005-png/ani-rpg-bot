@@ -108,6 +108,21 @@ ${nextUnlock<=90?`💡 Next skill unlocks at Lv *${nextUnlock}*`:''}\n${player.p
       return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
     }
 
+    // ── LOCKED SKILLS ─────────────────────────────────────────
+    if (action === 'locked') {
+      const locked = player.skills?.locked || [];
+      if (locked.length === 0) {
+        return sock.sendMessage(chatId, { text: '✅ You have unlocked all available skills!' }, { quoted: msg });
+      }
+      let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔒 *LOCKED SKILLS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      locked.forEach(s => {
+        txt += `🔒 *${s.name}* — Unlocks at Lv.${s.unlocksAtLevel || '?'}\n`;
+        txt += `   💥 DMG: ${s.damage} | ⚡ Cost: ${s.energyCost} | ⏰ CD: ${s.cooldown}t\n\n`;
+      });
+      txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+    }
+
     // ── PASSIVES ──────────────────────────────────────────────
     if (action === 'passives') {
       const passives = player.skills?.passive || [];

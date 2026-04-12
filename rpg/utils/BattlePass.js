@@ -73,13 +73,13 @@ function getPremiumReward(lvl, isMilestone) {
 
 // ── Pass XP sources ───────────────────────────────────────────────
 const XP_SOURCES = {
-  pvp_win:        80,
+  pvp_win:        150,
   pvp_participate: 30,
   dungeon_floor:  20,   // per floor
-  dungeon_clear: 150,   // full dungeon
+  dungeon_clear: 300,   // full dungeon
   boss_kill:     200,
   world_boss:    500,
-  daily_claim:    50,
+  daily_claim:    100,
   challenge_done: 100,
   casino_win:     25,
   summon_pull:    10,   // per pull

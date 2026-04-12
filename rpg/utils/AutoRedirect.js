@@ -8,7 +8,8 @@
 const COMMAND_CATEGORIES = {
   pvp:     ['pvp'],
   casino:  ['casino'],
-  dungeon: ['dungeon', 'worldboss', 'wb', 'coop', 'party', 'boss'],
+  // dungeon commands work in ALL groups — no restriction
+  // dungeon: ['dungeon', 'worldboss', 'wb', 'coop', 'party', 'boss'],
   guild:   ['guild', 'guildwar', 'gw', 'war'],
 };
 

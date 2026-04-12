@@ -1,6 +1,8 @@
 const SkillDescriptions = require('./SkillDescriptions');
 const StatusEffectManager = require('./StatusEffectManager');
 const EffectParser = require('./EffectParser');
+let ArtifactSystem; try { ArtifactSystem = require('./ArtifactSystem'); } catch(e) {}
+let BuffManager; try { BuffManager = require('./BuffManager'); } catch(e) {}
 
 class ImprovedCombat {
 
@@ -92,7 +94,13 @@ class ImprovedCombat {
     const weaponBonus = attacker.weapon?.bonus || attacker.weapon?.attack || 0;
 
     // Apply active ATK buffs + passives + status effect modifiers
-    let effectiveAtk = attacker.stats.atk || 0;
+    // Apply equipped artifact stat bonuses
+    let _artBonus = { atk: 0, def: 0, critChance: 0, critDamage: 0 };
+    if (ArtifactSystem?.getEquippedArtifactStats) {
+      _artBonus = ArtifactSystem.getEquippedArtifactStats(attacker);
+    }
+    const _atkBuffBoost = BuffManager ? BuffManager.getAtkBoost(attacker) : 0;
+    let effectiveAtk = (attacker.stats.atk || 0) + (_artBonus.atk || 0) + _atkBuffBoost;
 
     // Apply passive skills (Rampage, Blood Rage, etc.)
     const passives = attacker.skills?.passive || [];
@@ -102,7 +110,12 @@ class ImprovedCombat {
       if (eff.includes('+20% atk when hp < 50') && hpPercent < 50) effectiveAtk = Math.floor(effectiveAtk * 1.2);
       if (eff.includes('+30% atk when hp < 40') && hpPercent < 40) effectiveAtk = Math.floor(effectiveAtk * 1.3);
       if (eff.includes('+50% atk when hp < 30') && hpPercent < 30) effectiveAtk = Math.floor(effectiveAtk * 1.5);
-      if (eff.includes('+15% spell damage') || eff.includes('+15% skill damage') || eff.includes('+40% skill damage')) {
+      if (eff.includes('10 billion% resolve') || (eff.includes('+50%') && eff.includes('hp < 30'))) {
+        if (hpPercent < 30) effectiveAtk = Math.floor(effectiveAtk * 1.5);
+      }
+      if (eff.includes('+40% skill damage') || eff.includes('+40% skill')) {
+        effectiveAtk = Math.floor(effectiveAtk * 1.4);
+      } else if (eff.includes('+15% spell damage') || eff.includes('+15% skill damage')) {
         const bonus = eff.includes('40%') ? 1.4 : 1.15;
         effectiveAtk = Math.floor(effectiveAtk * bonus);
       }
@@ -125,13 +138,16 @@ class ImprovedCombat {
 
     // New formula: skill.damage + (player.atk * 0.5) scaled by multiplier
     const skillFlatDmg = skill.damage || 0;
+    const skillLevel = skill.level || 1;
+    const skillLevelMult = 1 + (skillLevel - 1) * 0.08; // +8% per level
+    // Balanced formula: flat skill damage + ATK scaling, both scaled by skill level
     let baseDamage = parsedEffects.damage
-      ? Math.floor((skillFlatDmg + effectiveAtk * 0.5) * mult)
+      ? Math.floor((skillFlatDmg * skillLevelMult + effectiveAtk * 0.35) * mult)
       : 0;
 
     // ── Crit ──────────────────────────────────────────────────
     const guaranteedCrit = parsedEffects.special.some(s => s.type === 'guaranteedCrit');
-    const critChance = 0.15 + ((attacker.stats.critChance || 0) / 100);
+    const critChance = 0.15 + ((attacker.stats.critChance || 0) / 100) + ((_artBonus.critChance || 0) / 100);
     const isCrit = guaranteedCrit || Math.random() < critChance;
     if (isCrit && baseDamage > 0) {
       const critMult = 1.5 + ((attacker.stats.critDamage || 0) / 100);
@@ -143,14 +159,18 @@ class ImprovedCombat {
     const penFactor = armorPen ? (1 - Math.min(armorPen.amount, 100) / 100) : 1;
 
     // Apply active DEF debuffs on defender
-    let effectiveDef = defender.stats?.def || 0;
+    let _defArtBonus = ArtifactSystem?.getEquippedArtifactStats ? ArtifactSystem.getEquippedArtifactStats(defender) : { def: 0 };
+    let effectiveDef = (defender.stats?.def || 0) + (_defArtBonus.def || 0);
     if (Array.isArray(defender.debuffs)) {
       for (const db of defender.debuffs) {
         if (db.stat === 'def') effectiveDef = Math.max(0, Math.floor(effectiveDef * (1 - db.amount / 100)));
       }
     }
 
-    const defReduction = Math.floor(effectiveDef * 0.4 * penFactor);
+    // DEF reduces damage but has diminishing returns (max 70% reduction)
+    const defRatio = effectiveDef / (effectiveDef + baseDamage * 0.5 + 1);
+    const defReductionPct = Math.min(0.70, defRatio) * penFactor;
+    const defReduction = Math.floor(baseDamage * defReductionPct);
     baseDamage = Math.max(parsedEffects.damage ? 5 : 0, baseDamage - defReduction);
 
     // ── Apply all effects ─────────────────────────────────────
@@ -163,6 +183,28 @@ class ImprovedCombat {
     // Apply damage to defender
     if (finalDamage > 0) {
       defender.stats.hp = Math.max(0, defender.stats.hp - finalDamage);
+      
+      // Lifesteal — heal attacker based on damage dealt
+      const lifestealEffect = parsedEffects.special.find(s => s.type === 'lifesteal');
+      if (lifestealEffect && finalDamage > 0) {
+        const healAmt = Math.floor(finalDamage * (lifestealEffect.amount / 100));
+        attacker.stats.hp = Math.min(attacker.stats.maxHp || attacker.stats.hp + healAmt, attacker.stats.hp + healAmt);
+        effectResult.narrative += `💚 *Lifesteal!* Healed ${healAmt} HP!\n`;
+      }
+    }
+
+    // ── Apply passive lifesteal (Immortal Formula etc.) ─────────
+    if (finalDamage > 0 && Array.isArray(attacker.skills?.passive)) {
+      for (const passive of attacker.skills.passive) {
+        const eff = (passive.effect || '').toLowerCase();
+        if (eff.includes('heal') && eff.includes('damage dealt')) {
+          const healPct = parseFloat(eff.match(/(\d+)%/)?.[1] || '0') / 100;
+          const healAmt = Math.floor(finalDamage * healPct);
+          if (healAmt > 0) {
+            attacker.stats.hp = Math.min(attacker.stats.maxHp, (attacker.stats.hp || 0) + healAmt);
+          }
+        }
+      }
     }
 
     // ── Build message ─────────────────────────────────────────

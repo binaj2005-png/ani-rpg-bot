@@ -233,18 +233,9 @@ Examples:
       applyOrigin(player, originKey);
 
       // Registration gold bonus
-      const BOT_OWNER = '221951679328499@lid';
-      const CO_OWNER  = '194592469209292@lid';
-      if (sender === BOT_OWNER) {
-        player.gold = 500_000_000_000;
-        player.manaCrystals = 1_000_000_000;
-      } else if (sender === CO_OWNER) {
-        player.gold = 10_000_000_000;
-        player.manaCrystals = 100_000_000;
-      } else {
-        player.gold = 100000 + (ORIGINS[originKey]?.extraGold || 0);
-        player.manaCrystals = 320; // 2 starter pulls to get going
-      }
+      // All players start equally — owner uses /give command if needed
+      player.gold = 100000 + (ORIGINS[originKey]?.extraGold || 0);
+      player.manaCrystals = 320; // 2 starter pulls to get going
 
       db.users[sender] = player;
 
@@ -256,6 +247,16 @@ Examples:
 
       RegenManager.startRegen(sender, player, db, saveDatabase);
       saveDatabase();
+      
+      // Auto-start tutorial dungeon after registration
+      setTimeout(async () => {
+        try {
+          const Tutorial = require('./tutorial');
+          await Tutorial.startTutorialDungeon(sock, chatId, sender, player);
+        } catch(e) {
+          console.error('Tutorial start error:', e.message);
+        }
+      }, 3000);
 
       const origin = ORIGINS[originKey];
       const rarityEmoji  = { common:'💪', rare:'🔥', epic:'✨', legendary:'🌟', divine:'⚗️' };

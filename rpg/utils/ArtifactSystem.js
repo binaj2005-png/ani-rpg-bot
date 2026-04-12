@@ -1817,7 +1817,56 @@ function calculateCombatBonusFromPlayer(player) {
 // ═══════════════════════════════════════════════════════════════
 // EXPORTS
 // ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// GET TOTAL STAT BONUSES FROM ALL EQUIPPED ARTIFACTS
+// ═══════════════════════════════════════════════════════════════
+function getEquippedArtifactStats(player) {
+  const bonuses = { atk: 0, def: 0, hp: 0, maxHp: 0, speed: 0, critChance: 0, critDamage: 0, energy: 0, maxEnergy: 0 };
+  if (!player?.artifacts?.equipped) return bonuses;
+  
+  const ArtifactCatalog = ARTIFACT_CATALOG || {};
+  
+  for (const [slot, artifactName] of Object.entries(player.artifacts.equipped)) {
+    if (!artifactName) continue;
+    
+    // Find artifact in inventory or catalog
+    let artifact = null;
+    if (Array.isArray(player.artifacts.inventory)) {
+      artifact = player.artifacts.inventory.find(a => (a.name || a) === artifactName);
+    }
+    // Try catalog
+    if (!artifact) {
+      for (const tier of Object.values(ArtifactCatalog)) {
+        if (Array.isArray(tier)) {
+          const found = tier.find(a => a.name === artifactName);
+          if (found) { artifact = found; break; }
+        }
+      }
+    }
+    if (!artifact || typeof artifact === 'string') continue;
+    
+    const enhancement = player.artifacts?.enhanced?.[artifactName] || 0;
+    const stats = artifact.stats || artifact.bonus || {};
+    
+    for (const [stat, val] of Object.entries(stats)) {
+      const value = enhancement > 0 ? Math.floor(val * (1 + enhancement * 0.1)) : val;
+      const key = stat.toLowerCase();
+      if (key === 'atk' || key === 'attack')      bonuses.atk      += value;
+      else if (key === 'def' || key === 'defense') bonuses.def      += value;
+      else if (key === 'hp' || key === 'maxhp')   { bonuses.hp += value; bonuses.maxHp += value; }
+      else if (key === 'spd' || key === 'speed')   bonuses.speed    += value;
+      else if (key === 'crit')                      bonuses.critChance += value;
+      else if (key === 'critdamage' || key === 'crit_damage') bonuses.critDamage += value;
+      else if (key === 'energy' || key === 'maxenergy') { bonuses.energy += value; bonuses.maxEnergy += value; }
+    }
+  }
+  return bonuses;
+}
+
+
 module.exports = {
+  getEquippedArtifactStats,
   ARTIFACT_DATABASE,
   ARTIFACT_SETS,
   RARITY_INFO,

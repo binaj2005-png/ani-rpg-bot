@@ -212,12 +212,12 @@ function scaleBossForFloor(bossDef, playerLevel, floor) {
 
 function calculateFloorRewards(floor, playerLevel, isBoss) {
   const base = {
-    xp:       Math.floor((300 + floor * 160) * (1 + playerLevel * 0.05)),
+    xp:       Math.floor((600 + floor * 320) * (1 + playerLevel * 0.08)),
     gold:     Math.floor((2000 + floor * 900) * (1 + playerLevel * 0.05)),
     crystals: Math.floor((15  + floor * 6)   * (1 + playerLevel * 0.02)),
   };
   if (isBoss) {
-    base.xp       = Math.floor(base.xp * 6);
+    base.xp       = Math.floor(base.xp * 8);
     base.gold     = Math.floor(base.gold * 6);
     base.crystals = Math.floor(base.crystals * 5);
     base.upgradePoints = floor === 20 ? 15 : floor === 15 ? 10 : floor === 10 ? 6 : 4;
@@ -299,7 +299,7 @@ class DungeonManager {
     const eliB = monster.isElite ? 3 : 1;
     const bosB = monster.isBoss ? 5 : 1;
     return {
-      xp:       Math.floor(200  * mult * lvlB * 1.92 * eliB * bosB),
+      xp:       Math.floor(400  * mult * lvlB * 1.92 * eliB * bosB),
       crystals: Math.floor(14   * mult * lvlB * 1.17 * eliB * bosB),
       gold:     Math.floor(2900 * mult * lvlB * 3.03 * eliB * bosB)
     };
