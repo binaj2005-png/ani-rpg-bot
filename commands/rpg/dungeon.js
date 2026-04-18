@@ -596,7 +596,18 @@ module.exports = {
           log += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
           log += `💀 *${monster.name}* has been defeated!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
           log += `✨ +${xpGain} XP | 💰 +${goldGain} Gold | 💎 +${crystalGain} Crystals\n`;
-          if (isBossSolo) log += `\n👹 *BOSS DEFEATED!* You earned bonus rewards!`;
+          if (isBossSolo) {
+            log += `\n👹 *BOSS DEFEATED!* You earned bonus rewards!`;
+            // 25% egg drop on solo boss floors
+            if (Math.random() < 0.25) {
+              try {
+                const { rollEggType } = require('../../rpg/utils/PetDatabase');
+                const PetManager = require('../../rpg/utils/PetManager');
+                const r = PetManager.giveEgg(sender, rollEggType());
+                if (r.success) log += `\n🥚 *${r.egg.name}* found in the boss chamber!`;
+              } catch(e) {}
+            }
+          }
 
           if (sd.currentFloor >= sd.maxFloors) {
             // Apply buff multipliers
@@ -956,7 +967,7 @@ async function handleMonsterDefeat(sock, chatId, party, monster, dungeon, db, sa
     LevelUpManager.checkAndApplyLevelUps(member, saveDatabase, sock, chatId);
   });
 
-  // Boss loot
+  // Boss loot + egg drops
   let lootMsg = '';
   if (isBoss) {
     const bossLoot = DungeonManager.getBossLoot(dungeon.currentFloor);
@@ -967,6 +978,31 @@ async function handleMonsterDefeat(sock, chatId, party, monster, dungeon, db, sa
         bossLoot.forEach(item => member.inventory.items.push({ ...item }));
       });
       lootMsg = '\n🎁 Boss loot: ' + bossLoot.map(i => i.name).join(', ');
+    }
+    // Boss floors have higher egg drop chance (30%)
+    if (Math.random() < 0.30) {
+      try {
+        const { rollEggType } = require('../../rpg/utils/PetDatabase');
+        const PetManager = require('../../rpg/utils/PetManager');
+        const eggId = rollEggType();
+        party.members.forEach(m => {
+          const r = PetManager.giveEgg(m.id, eggId);
+          if (r.success) lootMsg += `\n🥚 *${r.egg.name}* found by ${db.users[m.id]?.name || 'someone'}!`;
+        });
+      } catch(e) {}
+    }
+  } else {
+    // Regular floors: 10% egg drop chance
+    if (Math.random() < 0.10) {
+      try {
+        const { rollEggType } = require('../../rpg/utils/PetDatabase');
+        const PetManager = require('../../rpg/utils/PetManager');
+        const eggId = rollEggType();
+        // Only leader gets egg on regular floors
+        const leaderId = party.leader;
+        const r = PetManager.giveEgg(leaderId, eggId);
+        if (r.success) lootMsg += `\n🥚 *${r.egg.name}* found by ${db.users[leaderId]?.name || 'leader'}!`;
+      } catch(e) {}
     }
   }
 

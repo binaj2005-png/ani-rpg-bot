@@ -736,8 +736,9 @@ async function handleGateCleared(sock, chatId, player, gate, db, saveDatabase, m
   if (!player.gatesCleared) player.gatesCleared = 0;
   player.gatesCleared++;
 
-  // Check level up
-  const levelUpResult = LevelUpManager.checkLevelUp(player);
+  // Check level up — instant, with notification
+  LevelUpManager.checkAndApplyLevelUps(player, saveDatabase, sock, chatId);
+  const currentLevel = player.level;
   
   let message = `━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎉 GATE CLEARED! 🎉
@@ -756,21 +757,6 @@ async function handleGateCleared(sock, chatId, player, gate, db, saveDatabase, m
 
   if (crystalsReward > 0) {
     message += `\n💎 +${crystalsReward} Crystals`;
-  }
-
-  message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  if (levelUpResult.leveled) {
-    message += `\n\n✨✨✨ LEVEL UP! ✨✨✨`;
-    message += `\n🎉 Level ${levelUpResult.oldLevel} → ${levelUpResult.newLevel}!`;
-    message += `\n💭 Power surges through you!`;
-    
-    if (levelUpResult.newSkills && levelUpResult.newSkills.length > 0) {
-      message += `\n\n📚 New Skills:`;
-      levelUpResult.newSkills.forEach(skill => {
-        message += `\n   ✨ ${skill}`;
-      });
-    }
   }
 
   message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`;

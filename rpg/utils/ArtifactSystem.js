@@ -1825,7 +1825,8 @@ function getEquippedArtifactStats(player) {
   const bonuses = { atk: 0, def: 0, hp: 0, maxHp: 0, speed: 0, critChance: 0, critDamage: 0, energy: 0, maxEnergy: 0 };
   if (!player?.artifacts?.equipped) return bonuses;
   
-  const ArtifactCatalog = ARTIFACT_CATALOG || {};
+  // Use ARTIFACT_DATABASE (the correct variable name in this file)
+  const ArtifactCatalog = ARTIFACT_DATABASE || {};
   
   for (const [slot, artifactName] of Object.entries(player.artifacts.equipped)) {
     if (!artifactName) continue;
@@ -1835,14 +1836,10 @@ function getEquippedArtifactStats(player) {
     if (Array.isArray(player.artifacts.inventory)) {
       artifact = player.artifacts.inventory.find(a => (a.name || a) === artifactName);
     }
-    // Try catalog
+    // Try ARTIFACT_DATABASE directly (it's a flat key-value object)
     if (!artifact) {
-      for (const tier of Object.values(ArtifactCatalog)) {
-        if (Array.isArray(tier)) {
-          const found = tier.find(a => a.name === artifactName);
-          if (found) { artifact = found; break; }
-        }
-      }
+      const found = ArtifactCatalog[artifactName];
+      if (found) artifact = found;
     }
     if (!artifact || typeof artifact === 'string') continue;
     

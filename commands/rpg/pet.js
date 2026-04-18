@@ -1,565 +1,199 @@
-// ═══════════════════════════════════════════════════════════════
-// PET COMMAND - Player Pet Interface
-// ═══════════════════════════════════════════════════════════════
-
 const PetManager = require('../../rpg/utils/PetManager');
-const { PET_DATABASE, PET_FOOD } = require('../../rpg/utils/PetDatabase');
-
+const { PET_DATABASE, PET_FOOD, EGG_TYPES } = require('../../rpg/utils/PetDatabase');
 
 module.exports = {
   name: 'pet',
   aliases: ['pets', 'companion'],
   description: 'Manage your pet companions',
-  usage: '/pet <list|info|active|feed|evolve|rename|release>',
+  usage: '/pet <list|eggs|hatch|info|active|feed|evolve|rename|release|foods>',
 
   async execute(sock, msg, args, getDatabase, saveDatabase, sender) {
     try {
-      const subCommand = (args[0] || 'list').toLowerCase();
-
-      // ✅ DEFINE chatId HERE
       const chatId = msg.key.remoteJid;
-      const db = getDatabase();
+      const db     = getDatabase();
       const player = db.users[sender];
 
       if (!player) {
-        return await sock.sendMessage(chatId, {
-          text: '❌ You don\'t have a character! Use /register to start.'
-        }, { quoted: msg });
+        return sock.sendMessage(chatId, { text: '❌ Use /register first!' }, { quoted: msg });
       }
 
-      // ✅ CHANGED senderId to sender
       PetManager.updateHunger(sender);
+      const sub = (args[0] || 'list').toLowerCase();
 
-      switch (subCommand) {
-        case 'list':
-        case 'collection':
-        case 'all':
-          return await this.showPetList(sock, chatId, sender, msg);
+      // ── LIST PETS ───────────────────────────────────────────
+      if (sub === 'list' || sub === 'collection' || sub === 'all') {
+        const pets = PetManager.getPlayerPets(sender);
+        const eggs = PetManager.getPlayerEggs(sender);
+        const active = PetManager.getActivePet(sender);
 
-        case 'info':
-        case 'view':
-        case 'stats':
-          const petIndex = parseInt(args[1]) - 1;
-          return await this.showPetInfo(sock, chatId, sender, petIndex, msg);
-
-        case 'active':
-        case 'current':
-        case 'set':
-          if (args[1]) {
-            const setIndex = parseInt(args[1]) - 1;
-            return await this.setActivePet(sock, chatId, sender, setIndex, msg);
-          } else {
-            return await this.showActivePet(sock, chatId, sender, msg);
-          }
-
-        case 'feed':
-          const feedIndex = parseInt(args[1]) - 1;
-          const foodItem = args.slice(2).join(' ');
-          if (feedIndex < 0 || !foodItem) {
-            return await sock.sendMessage(chatId, {
-              text: '❌ Usage: `/pet feed <pet#> <food>`\nExample: `/pet feed 1 Meat`\n\nUse `/pet foods` to see available food!'
-            }, { quoted: msg });
-          }
-          return await this.feedPet(sock, chatId, sender, feedIndex, foodItem, msg, getDatabase, saveDatabase);
-
-        case 'foods':
-        case 'food':
-          return await this.showFoodList(sock, chatId, msg);
-
-        case 'evolve':
-          const evolveIndex = parseInt(args[1]) - 1;
-          const evolutionChoice = args[2];
-          if (evolveIndex < 0) {
-            return await sock.sendMessage(chatId, {
-              text: '❌ Usage: `/pet evolve <pet#> [evolution_id]`\nExample: `/pet evolve 1 king_slime`'
-            }, { quoted: msg });
-          }
-          return await this.evolvePet(sock, chatId, sender, evolveIndex, evolutionChoice, msg);
-
-        case 'rename':
-        case 'nickname':
-          const renameIndex = parseInt(args[1]) - 1;
-          const newName = args.slice(2).join(' ');
-          if (renameIndex < 0 || !newName) {
-            return await sock.sendMessage(chatId, {
-              text: '❌ Usage: `/pet rename <pet#> <new name>`\nExample: `/pet rename 1 Fluffy`'
-            }, { quoted: msg });
-          }
-          return await this.renamePet(sock, chatId, sender, renameIndex, newName, msg);
-
-        case 'release':
-        case 'delete':
-          const releaseIndex = parseInt(args[1]) - 1;
-          if (releaseIndex < 0) {
-            return await sock.sendMessage(chatId, {
-              text: '❌ Usage: `/pet release <pet#>`\nExample: `/pet release 1`'
-            }, { quoted: msg });
-          }
-          return await this.releasePet(sock, chatId, sender, releaseIndex, msg);
-
-        case 'abilities':
-        case 'skills':
-          const abilityIndex = parseInt(args[1]) - 1;
-          return await this.showPetAbilities(sock, chatId, sender, abilityIndex, msg);
-
-        case 'catch':
-        case 'capture':
-          return await sock.sendMessage(chatId, {
-            text: '💡 To catch pets, you need to find them in dungeons or specific locations!\n\nWhen you encounter a wild pet during exploration, use `/catch` to attempt to capture it.'
+        if (pets.length === 0 && eggs.length === 0) {
+          return sock.sendMessage(chatId, {
+            text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🐾 *NO PETS YET*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nFind eggs in dungeons and hatch them!\n\n🥚 Eggs drop from dungeon floors\n🐣 /pet hatch [#] to hatch an egg\n⚔️ Attack pets fight with you\n💚 Support pets heal you\n💰 Scavenger pets find extra loot\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
           }, { quoted: msg });
+        }
 
-        default:
-          return await sock.sendMessage(chatId, {
-            text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🐾 PET COMMANDS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const roleEmoji = { attack: '⚔️', support: '💚', scavenger: '💰' };
+        let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🐾 *YOUR PETS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
 
-📋 View Pets:
-• /pet list - All your pets
-• /pet info <#> - Pet details
-• /pet active - Current pet
-• /pet abilities <#> - Pet skills
-
-🎯 Manage Pets:
-• /pet active <#> - Set active pet
-• /pet feed <#> <food> - Feed pet
-• /pet evolve <#> - Evolve pet
-• /pet rename <#> <name> - Rename
-• /pet release <#> - Release pet
-
-📚 Information:
-• /pet foods - Available food
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━`
-          }, { quoted: msg });
-      }
-    } catch (error) {
-      console.error('Error in pet command:', error);
-      const chatId = msg.key.remoteJid;
-      await sock.sendMessage(chatId, {
-        text: '❌ An error occurred while processing your pet command.'
-      }, { quoted: msg });
-    }
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // SHOW PET LIST
-  // ═══════════════════════════════════════════════════════════════
-  async showPetList(sock, chatId, senderId, msg) {
-    const playerData = PetManager.getPlayerData(senderId);
-
-    if (playerData.pets.length === 0) {
-      return await sock.sendMessage(chatId, {
-        text: '📭 You don\'t have any pets yet!\n\n💡 Explore dungeons and locations to find wild pets to catch!'
-      }, { quoted: msg });
-    }
-
-    let message = '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += '🐾 YOUR PET COLLECTION\n';
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-
-    playerData.pets.forEach((pet, index) => {
-      const isActive = playerData.activePet === pet.instanceId;
-      const displayName = pet.nickname || pet.name;
-
-      message += `${index + 1}. ${pet.emoji} ${displayName}${isActive ? ' ⭐' : ''}\n`;
-      message += `   Lv.${pet.level} ${pet.rarity.toUpperCase()} | ${pet.type}\n`;
-      message += `   💕 ${pet.bonding} | 😊 ${pet.happiness} | 🍖 ${pet.hunger}\n`;
-
-      // Warnings
-      if (pet.happiness < 30) message += `   ⚠️ Unhappy!\n`;
-      if (pet.hunger > 70) message += `   ⚠️ Hungry!\n`;
-
-      message += '\n';
-    });
-
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += `Total: ${playerData.pets.length}/20 pets\n`;
-    message += '💡 Use `/pet info <#>` for details';
-
-    await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // SHOW PET INFO
-  // ═══════════════════════════════════════════════════════════════
-  async showPetInfo(sock, chatId, senderId, petIndex, msg) {
-    const playerData = PetManager.getPlayerData(senderId);
-    const pet = playerData.pets[petIndex];
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ Pet not found! Use `/pet list` to see your pets.'
-      }, { quoted: msg });
-    }
-
-    const petTemplate = PET_DATABASE[pet.id];
-    const expReq = PetManager.getExpRequirement(pet.level);
-    const expPercent = Math.floor((pet.exp / expReq) * 100);
-
-    let message = '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += `${pet.emoji} ${pet.nickname || pet.name}\n`;
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-
-    message += `*Type:* ${pet.type} ${pet.rarity.toUpperCase()}\n`;
-    message += `*Level:* ${pet.level}\n`;
-    message += `*EXP:* ${pet.exp}/${expReq} (${expPercent}%)\n\n`;
-
-    message += '*Stats:*\n';
-    message += `❤️ HP: ${pet.stats.hp}\n`;
-    message += `⚔️ ATK: ${pet.stats.atk}\n`;
-    message += `🛡️ DEF: ${pet.stats.def}\n`;
-    message += `⚡ SPD: ${pet.stats.spd}\n\n`;
-
-    message += '*Bond & Care:*\n';
-    message += `💕 Bonding: ${this.getProgressBar(pet.bonding, 100)} ${pet.bonding}/100\n`;
-    message += `😊 Happiness: ${this.getProgressBar(pet.happiness, 100)} ${pet.happiness}/100\n`;
-    message += `🍖 Hunger: ${this.getProgressBar(pet.hunger, 100)} ${pet.hunger}/100\n\n`;
-
-    message += '*Battle Record:*\n';
-    const winRate = pet.battles > 0 ? Math.floor((pet.wins / pet.battles) * 100) : 0;
-    message += `⚔️ ${pet.battles} battles | ${pet.wins}W - ${pet.defeats}L (${winRate}%)\n\n`;
-
-    // Abilities
-    message += '*Abilities:*\n';
-    pet.abilities.forEach((ability, index) => {
-      message += `${index + 1}. ${ability.name} - ${ability.desc}\n`;
-    });
-
-    // Evolution info
-    if (pet.evolution) {
-      message += '\n*Evolution:*\n';
-      if (pet.level >= pet.evolution.level) {
-        message += `✅ Ready! Use: /pet evolve ${petIndex + 1}\n`;
-        pet.evolution.options.forEach(opt => {
-          message += `  → ${opt.name} (${opt.id})\n`;
+        pets.forEach((pet, i) => {
+          const isActive = active?.instanceId === pet.instanceId;
+          const re = roleEmoji[pet.role] || '⚔️';
+          txt += `${isActive ? '▶️' : `${i+1}.`} ${pet.emoji} *${pet.nickname || pet.name}* ${re}\n`;
+          txt += `   Lv.${pet.level} | ${pet.rarity.toUpperCase()} | ${pet.role?.toUpperCase()}\n`;
+          txt += `   💕 ${pet.bonding}/100 | 😊 ${pet.happiness}/100 | 🍖 ${pet.hunger}/100\n\n`;
         });
-      } else {
-        message += `❌ Level ${pet.evolution.level} required (Currently ${pet.level})\n`;
+
+        if (eggs.length > 0) {
+          txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🥚 *EGGS (${eggs.length}/5)*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+          eggs.forEach((egg, i) => {
+            txt += `${i+1}. ${egg.emoji} *${egg.name}* [${egg.rarity.toUpperCase()}]\n   ${egg.desc}\n\n`;
+          });
+          txt += `/pet hatch [#] to hatch an egg\n`;
+        }
+
+        txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n/pet info [#] | /pet active [#]\n/pet feed [#] [food] | /pet evolve [#]`;
+        return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
       }
-    }
 
-    // Preferred foods
-    if (petTemplate.feedItems && petTemplate.feedItems.length > 0) {
-      message += '\n*Favorite Foods:*\n';
-      message += petTemplate.feedItems.join(', ');
-    }
-
-    message += '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-
-    await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // SHOW ACTIVE PET
-  // ═══════════════════════════════════════════════════════════════
-  async showActivePet(sock, chatId, senderId, msg) {
-    const pet = PetManager.getActivePet(senderId);
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ You don\'t have an active pet!\n\nUse `/pet active <#>` to set one.'
-      }, { quoted: msg });
-    }
-
-    const statsString = PetManager.getPetStatsString(pet);
-
-    let message = '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += '⭐ ACTIVE COMPANION\n';
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    message += statsString;
-    message += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += '💡 Your pet assists in battles!';
-
-    await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // SET ACTIVE PET
-  // ═══════════════════════════════════════════════════════════════
-  async setActivePet(sock, chatId, senderId, petIndex, msg) {
-    const playerData = PetManager.getPlayerData(senderId);
-    const pet = playerData.pets[petIndex];
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ Pet not found! Use `/pet list` to see your pets.'
-      }, { quoted: msg });
-    }
-
-    const result = PetManager.setActivePet(senderId, pet.instanceId);
-    await sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // FEED PET
-  // ═══════════════════════════════════════════════════════════════
-  async feedPet(sock, chatId, senderId, petIndex, foodItem, msg, getDatabase, saveDatabase) {
-    const { PET_FOOD } = require('../../rpg/utils/PetDatabase');
-    const db = getDatabase ? getDatabase() : null;
-    const player = db ? db.users[senderId] : null;
-    const playerData = PetManager.getPlayerData(senderId);
-    const pet = playerData.pets[petIndex];
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ Pet not found! Use `/pet list` to see your pets.'
-      }, { quoted: msg });
-    }
-
-    // Case-insensitive food key lookup
-    const foodKey = Object.keys(PET_FOOD).find(k => k.toLowerCase() === foodItem.toLowerCase());
-    if (!foodKey) {
-      return await sock.sendMessage(chatId, {
-        text: `❌ Unknown food: "${foodItem}"\n\nUse /food to see your food inventory.`
-      }, { quoted: msg });
-    }
-
-    // Check player inventory for this food
-    const PET_FOOD_NAMES = new Set([
-      'Gel','Water','Meat','Bone','Coal','Fish','Fire Gem','Electric Crystal',
-      'Metal','Shadow Essence','Dragon Meat','Rare Gems','Spirit Essence',
-      'Celestial Fruit','Ice Crystal','Phoenix Tears','Chaos Shard',
-      'Ancient Stone','Void Crystal','Star Dust','Primordial Essence','Existence Shard'
-    ]);
-
-    // Check player's real inventory for this food
-    let itemIdx = -1;
-    if (player && player.inventory && player.inventory.items) {
-      itemIdx = player.inventory.items.findIndex(i =>
-        (i.isPetFood || PET_FOOD_NAMES.has(i.name) || (i.type||'').toLowerCase() === 'petfood') &&
-        i.name.toLowerCase() === foodKey.toLowerCase()
-      );
-    }
-
-    if (itemIdx === -1) {
-      return await sock.sendMessage(chatId, {
-        text: `❌ You don't have any *${foodKey}*!\n\n💡 Use /food to see your food inventory.`
-      }, { quoted: msg });
-    }
-
-    // Consume one from inventory
-    player.inventory.items.splice(itemIdx, 1);
-    if (saveDatabase) saveDatabase();
-
-    const result = PetManager.feedPet(senderId, pet.instanceId, foodKey);
-
-    if (!result.success) {
-      return await sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
-    }
-
-    let message = `${result.message}\n\n`;
-    message += `💕 Bonding: +${result.bondingGain}\n`;
-    message += `😊 Happiness: +${result.happinessGain}\n`;
-    message += `🍖 Hunger: ${result.pet.hunger}/100`;
-
-    await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // SHOW FOOD LIST
-  // ═══════════════════════════════════════════════════════════════
-  async showFoodList(sock, chatId, msg) {
-    // This is /pet foods — shows all TYPES of food that exist (reference list)
-    let message = '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += '🍖 ALL PET FOOD TYPES\n';
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-
-    const foodByRarity = {
-      common: [], uncommon: [], rare: [], epic: [], legendary: [], mythic: []
-    };
-
-    for (const [name, stats] of Object.entries(PET_FOOD)) {
-      if (foodByRarity[stats.rarity]) foodByRarity[stats.rarity].push({ name, ...stats });
-    }
-
-    const rarityEmoji = { common:'⚪', uncommon:'🟢', rare:'🔵', epic:'🟣', legendary:'🟠', mythic:'🌌' };
-    for (const [rarity, foods] of Object.entries(foodByRarity)) {
-      if (foods.length === 0) continue;
-      message += `${rarityEmoji[rarity]} *${rarity.toUpperCase()}*\n`;
-      foods.forEach(food => {
-        message += `  • ${food.name} — 💕+${food.bonding} 😊+${food.happiness}\n`;
-      });
-      message += '\n';
-    }
-
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += '📌 /food — your food inventory\n';
-    message += '📌 /pet feed [#] [food name]';
-
-    await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // EVOLVE PET
-  // ═══════════════════════════════════════════════════════════════
-  async evolvePet(sock, chatId, senderId, petIndex, evolutionChoice, msg) {
-    const playerData = PetManager.getPlayerData(senderId);
-    const pet = playerData.pets[petIndex];
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ Pet not found! Use `/pet list` to see your pets.'
-      }, { quoted: msg });
-    }
-
-    if (!pet.evolution) {
-      return await sock.sendMessage(chatId, {
-        text: `❌ ${pet.emoji} ${pet.nickname || pet.name} cannot evolve!`
-      }, { quoted: msg });
-    }
-
-    if (pet.level < pet.evolution.level) {
-      return await sock.sendMessage(chatId, {
-        text: `❌ ${pet.emoji} ${pet.nickname || pet.name} must reach level ${pet.evolution.level} to evolve! (Currently ${pet.level})`
-      }, { quoted: msg });
-    }
-
-    // If no evolution choice provided, show options
-    if (!evolutionChoice) {
-      let message = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      message += `🌟 EVOLUTION OPTIONS\n`;
-      message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-      message += `${pet.emoji} ${pet.nickname || pet.name} can evolve into:\n\n`;
-
-      pet.evolution.options.forEach(opt => {
-        const evolvedPet = PET_DATABASE[opt.id];
-        message += `${evolvedPet.emoji} *${opt.name}*\n`;
-        message += `  ID: ${opt.id}\n`;
-        message += `  ${evolvedPet.description}\n`;
-
-        if (opt.requires) {
-          message += `  Requirements:\n`;
-          if (opt.requires.bonding) {
-            const hasBonding = pet.bonding >= opt.requires.bonding;
-            message += `  ${hasBonding ? '✅' : '❌'} Bonding ${opt.requires.bonding} (Current: ${pet.bonding})\n`;
-          }
-          if (opt.requires.item) {
-            message += `  • ${opt.requires.item}\n`;
-          }
+      // ── EGGS ────────────────────────────────────────────────
+      if (sub === 'eggs' || sub === 'egg') {
+        const eggs = PetManager.getPlayerEggs(sender);
+        if (eggs.length === 0) {
+          return sock.sendMessage(chatId, {
+            text: `🥚 *No eggs yet!*\nFind eggs by exploring dungeons.\n\nEgg rarities:\n⚪ Common Egg — 65% chance\n🔥 Fire Egg — 25% chance\n🌑 Shadow Egg — 8% chance\n✨ Ancient Egg — 2% chance`
+          }, { quoted: msg });
         }
-        message += '\n';
-      });
+        let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🥚 *YOUR EGGS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        eggs.forEach((egg, i) => {
+          txt += `*${i+1}.* ${egg.emoji} *${egg.name}* [${egg.rarity.toUpperCase()}]\n   ${egg.desc}\n\n`;
+        });
+        txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n/pet hatch [#] to hatch`;
+        return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+      }
 
-      message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      message += `💡 Use: /pet evolve ${petIndex + 1} <evolution_id>`;
-
-      return await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-    }
-
-    // Attempt evolution
-    const result = PetManager.evolvePet(senderId, pet.instanceId, evolutionChoice);
-
-    if (!result.success) {
-      return await sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
-    }
-
-    let message = '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += '🌟 EVOLUTION!\n';
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    message += `${result.message}\n\n`;
-
-    if (result.newAbilities.length > 0) {
-      message += '*New Abilities Learned:*\n';
-      result.newAbilities.forEach(ability => {
-        message += `• ${ability.name} - ${ability.desc}\n`;
-      });
-    }
-
-    message += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-
-    await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // RENAME PET
-  // ═══════════════════════════════════════════════════════════════
-  async renamePet(sock, chatId, senderId, petIndex, newName, msg) {
-    const playerData = PetManager.getPlayerData(senderId);
-    const pet = playerData.pets[petIndex];
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ Pet not found! Use `/pet list` to see your pets.'
-      }, { quoted: msg });
-    }
-
-    const result = PetManager.renamePet(senderId, pet.instanceId, newName);
-    await sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // RELEASE PET
-  // ═══════════════════════════════════════════════════════════════
-  async releasePet(sock, chatId, senderId, petIndex, msg) {
-    const playerData = PetManager.getPlayerData(senderId);
-    const pet = playerData.pets[petIndex];
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ Pet not found! Use `/pet list` to see your pets.'
-      }, { quoted: msg });
-    }
-
-    // Confirmation required
-    const result = PetManager.releasePet(senderId, pet.instanceId);
-    await sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // SHOW PET ABILITIES
-  // ═══════════════════════════════════════════════════════════════
-  async showPetAbilities(sock, chatId, senderId, petIndex, msg) {
-    const playerData = PetManager.getPlayerData(senderId);
-    const pet = playerData.pets[petIndex];
-
-    if (!pet) {
-      return await sock.sendMessage(chatId, {
-        text: '❌ Pet not found! Use `/pet list` to see your pets.'
-      }, { quoted: msg });
-    }
-
-    let message = '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += `${pet.emoji} ${pet.nickname || pet.name}'S ABILITIES\n`;
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-
-    if (pet.abilities.length === 0) {
-      message += '📭 No abilities learned yet.';
-    } else {
-      pet.abilities.forEach((ability, index) => {
-        message += `${index + 1}. *${ability.name}*\n`;
-        message += `   ${ability.desc}\n`;
-        message += `   Type: ${ability.type}`;
-        if (ability.damage) message += ` | Damage: ${ability.damage}`;
-        if (ability.aoe) message += ` | AOE`;
-        message += '\n';
-
-        if (ability.effect) {
-          message += `   Effect: `;
-          const effects = [];
-          for (const [key, value] of Object.entries(ability.effect)) {
-            effects.push(`${key} ${value}`);
-          }
-          message += effects.join(', ');
-          message += '\n';
+      // ── HATCH EGG ────────────────────────────────────────────
+      if (sub === 'hatch') {
+        const eggIdx = parseInt(args[1]) - 1;
+        if (isNaN(eggIdx) || eggIdx < 0) {
+          return sock.sendMessage(chatId, { text: '❌ Usage: /pet hatch [egg number]\nSee /pet eggs' }, { quoted: msg });
         }
-        message += '\n';
-      });
+        const result = PetManager.hatchEgg(sender, eggIdx);
+        return sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
+      }
+
+      // ── PET INFO ────────────────────────────────────────────
+      if (sub === 'info' || sub === 'view' || sub === 'stats') {
+        const idx = parseInt(args[1]) - 1;
+        const pets = PetManager.getPlayerPets(sender);
+        if (isNaN(idx) || !pets[idx]) {
+          return sock.sendMessage(chatId, { text: `❌ Choose 1-${pets.length}\n/pet list to see your pets` }, { quoted: msg });
+        }
+        const pet = pets[idx];
+        const statsStr = PetManager.getPetStatsString(pet);
+        const roleDesc = {
+          attack:    '⚔️ *Attack* — Fights alongside you, dealing damage',
+          support:   '💚 *Support* — Heals you and buffs your stats',
+          scavenger: '💰 *Scavenger* — Finds extra gold and items after fights (but is weak!)',
+        }[pet.role] || '⚔️ Attack';
+
+        let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${statsStr}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${roleDesc}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ *Abilities:*\n`;
+        pet.abilities.forEach(a => { txt += `• *${a.name}* — ${a.desc}\n`; });
+        if (pet.evolution) {
+          txt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🌟 *Evolution* (Lv.${pet.evolution.level}):\n`;
+          pet.evolution.options.forEach(o => { txt += `• ${o.name}\n`; });
+          txt += `/pet evolve ${idx+1} [id] to evolve`;
+        }
+        return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+      }
+
+      // ── SET/SHOW ACTIVE PET ─────────────────────────────────
+      if (sub === 'active' || sub === 'set' || sub === 'current') {
+        const pets = PetManager.getPlayerPets(sender);
+        if (args[1]) {
+          const idx = parseInt(args[1]) - 1;
+          if (isNaN(idx) || !pets[idx]) return sock.sendMessage(chatId, { text: `❌ Choose 1-${pets.length}` }, { quoted: msg });
+          const result = PetManager.setActivePet(sender, pets[idx].instanceId);
+          return sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
+        }
+        const pet = PetManager.getActivePet(sender);
+        if (!pet) return sock.sendMessage(chatId, { text: '❌ No active pet! Use /pet active [#]' }, { quoted: msg });
+        return sock.sendMessage(chatId, { text: `▶️ Active pet:\n${PetManager.getPetStatsString(pet)}` }, { quoted: msg });
+      }
+
+      // ── FEED ────────────────────────────────────────────────
+      if (sub === 'feed') {
+        const idx = parseInt(args[1]) - 1;
+        const foodName = args.slice(2).join(' ');
+        const pets = PetManager.getPlayerPets(sender);
+        if (isNaN(idx) || !pets[idx] || !foodName) {
+          return sock.sendMessage(chatId, { text: '❌ Usage: /pet feed [#] [food]\nSee /pet foods' }, { quoted: msg });
+        }
+        const result = PetManager.feedPet(sender, pets[idx].instanceId, foodName);
+        return sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
+      }
+
+      // ── FOODS LIST ──────────────────────────────────────────
+      if (sub === 'foods' || sub === 'food') {
+        let txt = `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🍖 *PET FOOD*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        Object.values(PET_FOOD).forEach(f => {
+          txt += `${f.emoji} *${f.name}* — ${f.cost.toLocaleString()}g\n`;
+          txt += `   Hunger -${f.hungerRestore} | Bonding +${f.bondingBonus} | XP +${f.xpBonus}\n\n`;
+        });
+        txt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n/pet feed [#] [food name]`;
+        return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+      }
+
+      // ── EVOLVE ──────────────────────────────────────────────
+      if (sub === 'evolve') {
+        const idx = parseInt(args[1]) - 1;
+        const choice = args[2];
+        const pets = PetManager.getPlayerPets(sender);
+        if (isNaN(idx) || !pets[idx]) {
+          return sock.sendMessage(chatId, { text: '❌ Usage: /pet evolve [#] [evolution_id]\nSee /pet info [#] for options' }, { quoted: msg });
+        }
+        const pet = pets[idx];
+        if (!pet.evolution) return sock.sendMessage(chatId, { text: '❌ This pet cannot evolve!' }, { quoted: msg });
+        if (!choice) {
+          let txt = `🌟 *${pet.name}* can evolve at Lv.${pet.evolution.level}!\n\n*Options:*\n`;
+          pet.evolution.options.forEach(o => { txt += `• \`${o.id}\` — ${o.name}\n`; });
+          txt += `\nUse: /pet evolve ${idx+1} [id]`;
+          return sock.sendMessage(chatId, { text: txt }, { quoted: msg });
+        }
+        const result = PetManager.evolvePet(sender, pet.instanceId, choice);
+        return sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
+      }
+
+      // ── RENAME ──────────────────────────────────────────────
+      if (sub === 'rename' || sub === 'nickname') {
+        const idx = parseInt(args[1]) - 1;
+        const name = args.slice(2).join(' ');
+        const pets = PetManager.getPlayerPets(sender);
+        if (isNaN(idx) || !pets[idx] || !name) {
+          return sock.sendMessage(chatId, { text: '❌ Usage: /pet rename [#] [name]' }, { quoted: msg });
+        }
+        const result = PetManager.renamePet(sender, pets[idx].instanceId, name);
+        return sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
+      }
+
+      // ── RELEASE ─────────────────────────────────────────────
+      if (sub === 'release' || sub === 'delete') {
+        const idx = parseInt(args[1]) - 1;
+        const pets = PetManager.getPlayerPets(sender);
+        if (isNaN(idx) || !pets[idx]) {
+          return sock.sendMessage(chatId, { text: '❌ Usage: /pet release [#]' }, { quoted: msg });
+        }
+        const result = PetManager.releasePet(sender, pets[idx].instanceId);
+        return sock.sendMessage(chatId, { text: result.message }, { quoted: msg });
+      }
+
+      // ── DEFAULT / HELP ───────────────────────────────────────
+      return sock.sendMessage(chatId, {
+        text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🐾 *PET SYSTEM*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🥚 Find eggs in dungeons\n🐣 Hatch them to get pets\n📈 Level pets up through battles\n🌟 Evolve at level 10\n\n*Pet Roles:*\n⚔️ Attack — fights with you\n💚 Support — heals & buffs you\n💰 Scavenger — finds extra gold/loot\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📋 *COMMANDS*\n/pet list           — All pets\n/pet eggs           — Your eggs\n/pet hatch [#]      — Hatch egg\n/pet info [#]       — Pet details\n/pet active [#]     — Set active\n/pet feed [#] [food] — Feed pet\n/pet foods          — Food list\n/pet evolve [#]     — Evolve\n/pet rename [#] [name] — Rename\n/pet release [#]    — Release\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      }, { quoted: msg });
+
+    } catch(err) {
+      console.error('[Pet] Error:', err.message);
+      return sock.sendMessage(msg.key.remoteJid, { text: '❌ Pet system error. Try again.' }, { quoted: msg });
     }
-
-    message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    message += '💡 Pets use abilities automatically in battle!';
-
-    await sock.sendMessage(chatId, { text: message }, { quoted: msg });
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // HELPER: GET PROGRESS BAR
-  // ═══════════════════════════════════════════════════════════════
-  getProgressBar(current, max, length = 10) {
-    const percent = Math.min(1, current / max);
-    const filled = Math.floor(percent * length);
-    const empty = length - filled;
-    return '🟢'.repeat(filled) + '⚪'.repeat(empty);
   }
 };

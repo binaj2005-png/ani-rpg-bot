@@ -1,488 +1,411 @@
-// ═══════════════════════════════════════════════════════════════
-// PET DATABASE - Complete Pet System
-// ═══════════════════════════════════════════════════════════════
+// PetDatabase.js — Complete Pet System
+// All pets start as common eggs. At level 3 they evolve into real creatures.
+// Three pet roles: attack, support, scavenger
+
+// ── EGG TEMPLATES (what players find/hatch) ──────────────────
+const EGG_TYPES = {
+  common_egg: {
+    id: 'common_egg',
+    name: 'Common Egg',
+    emoji: '🥚',
+    rarity: 'common',
+    desc: 'A plain egg. Something is inside...',
+    hatchLevel: 3,
+    possiblePets: ['slime_pup', 'forest_sprite', 'stone_golem_baby', 'wind_fairy', 'mud_crawler'],
+  },
+  fire_egg: {
+    id: 'fire_egg',
+    name: 'Fire Egg',
+    emoji: '🔥🥚',
+    rarity: 'uncommon',
+    desc: 'Warm to the touch. Smells like ash.',
+    hatchLevel: 3,
+    possiblePets: ['flame_fox', 'ember_lizard', 'pyro_bird'],
+  },
+  shadow_egg: {
+    id: 'shadow_egg',
+    name: 'Shadow Egg',
+    emoji: '🌑🥚',
+    rarity: 'rare',
+    desc: 'Dark and cold. Something dangerous stirs within.',
+    hatchLevel: 3,
+    possiblePets: ['shadow_wolf', 'void_bat', 'dark_serpent'],
+  },
+  ancient_egg: {
+    id: 'ancient_egg',
+    name: 'Ancient Egg',
+    emoji: '✨🥚',
+    rarity: 'epic',
+    desc: 'Covered in glowing runes. Incredibly rare.',
+    hatchLevel: 3,
+    possiblePets: ['lightning_drake', 'crystal_phoenix', 'abyss_demon'],
+  },
+};
+
+// ── SPAWN WEIGHTS FOR DUNGEONS ─────────────────────────────────
+// Common eggs spawn most often, ancient eggs almost never
+const EGG_SPAWN_WEIGHTS = {
+  common_egg: 65,
+  fire_egg: 25,
+  shadow_egg: 8,
+  ancient_egg: 2,
+};
+
+// ── PET DATABASE ──────────────────────────────────────────────
+// Each pet has a role: 'attack', 'support', or 'scavenger'
+// attack   — fights alongside player, deals damage
+// support  — buffs/heals the player
+// scavenger — finds extra loot/gold after fights (but weak/vulnerable)
 
 const PET_DATABASE = {
-  // ═══════════════════════════════════════════════════════════════
-  // COMMON PETS - Easy to find
-  // ═══════════════════════════════════════════════════════════════
-  slime: {
-    id: 'slime',
-    name: 'Slime',
-    rarity: 'common',
-    type: 'basic',
-    description: 'A cute gelatinous creature that wobbles around.',
+
+  // ─── ATTACK PETS ────────────────────────────────────────────
+
+  slime_pup: {
+    id: 'slime_pup',
+    name: 'Slime Pup',
     emoji: '🟢',
-    baseStats: {
-      hp: 450,
-      atk: 30,
-      def: 20,
-      spd: 240
-    },
-    growthRates: {
-      hp: 30,
-      atk: 12,
-      def: 6,
-      spd: 30
-    },
-    abilities: [
-      { level: 1, name: 'Bounce', desc: 'Small physical attack', damage: 15, type: 'physical' },
-      { level: 5, name: 'Acid Spit', desc: 'Deals poison damage', damage: 20, type: 'poison', effect: { poison: 2 } },
-      { level: 10, name: 'Divide', desc: 'Creates a clone to assist', damage: 0, type: 'support', effect: { summon: 'slime_clone' } }
-    ],
-    evolution: {
-      level: 15,
-      options: [
-        { id: 'king_slime', name: 'King Slime', requires: { item: 'Slime Crown' } },
-        { id: 'metal_slime', name: 'Metal Slime', requires: { item: 'Iron Ore', count: 10 } }
-      ]
-    },
-    catchRate: 80, // % chance to catch
-    habitat: ['dungeon_floor_1', 'forest'],
-    feedItems: ['Gel', 'Water']
-  },
-
-  wolf_pup: {
-    id: 'wolf_pup',
-    name: 'Wolf Pup',
     rarity: 'common',
-    type: 'beast',
-    description: 'A young wolf with keen senses and sharp teeth.',
-    emoji: '🐺',
-    baseStats: {
-      hp: 540,
-      atk: 40,
-      def: 20,
-      spd: 360
-    },
-    growthRates: {
-      hp: 36,
-      atk: 18,
-      def: 12,
-      spd: 60
-    },
+    role: 'attack',
+    type: 'basic',
+    description: 'A bouncy little slime that loves to fight.',
+    baseStats: { hp: 300, atk: 25, def: 15, spd: 40 },
+    growthRates: { hp: 25, atk: 8, def: 4, spd: 5 },
     abilities: [
-      { level: 1, name: 'Bite', desc: 'Quick bite attack', damage: 20, type: 'physical' },
-      { level: 5, name: 'Howl', desc: 'Boosts attack power', damage: 0, type: 'support', effect: { atk_buff: 30, duration: 3 } },
-      { level: 10, name: 'Pack Tactics', desc: 'Call wolf allies', damage: 25, type: 'physical', effect: { summon: 'wolf_pack' } }
+      { level: 1,  name: 'Bounce',    desc: 'Deals 15 damage',        damage: 15, type: 'physical' },
+      { level: 5,  name: 'Acid Spit', desc: 'Deals 25 poison damage', damage: 25, type: 'poison', effect: { poison: 2 } },
+      { level: 10, name: 'Slam',      desc: 'Deals 40 damage',        damage: 40, type: 'physical' },
     ],
     evolution: {
-      level: 20,
+      level: 10,
       options: [
-        { id: 'dire_wolf', name: 'Dire Wolf', requires: { bonding: 50 } },
-        { id: 'frost_wolf', name: 'Frost Wolf', requires: { item: 'Ice Crystal' } }
+        { id: 'king_slime',   name: 'King Slime 👑',   requires: {} },
+        { id: 'metal_slime',  name: 'Metal Slime ⚙️',  requires: { item: 'Iron Ore' } },
       ]
     },
-    catchRate: 70,
-    habitat: ['forest', 'mountain'],
-    feedItems: ['Meat', 'Bone']
+    catchRate: 80,
+    habitat: ['dungeon', 'forest'],
   },
 
-  fire_sprite: {
-    id: 'fire_sprite',
-    name: 'Fire Sprite',
-    rarity: 'common',
-    type: 'elemental',
-    description: 'A tiny spirit of flame, playful but dangerous.',
-    emoji: '🔥',
-    baseStats: {
-      hp: 405,
-      atk: 50,
-      def: 20,
-      spd: 450
-    },
-    growthRates: {
-      hp: 24,
-      atk: 24,
-      def: 6,
-      spd: 90
-    },
-    abilities: [
-      { level: 1, name: 'Ember', desc: 'Small fire attack', damage: 22, type: 'fire' },
-      { level: 5, name: 'Flame Burst', desc: 'Burns the target', damage: 30, type: 'fire', effect: { burn: 3 } },
-      { level: 10, name: 'Inferno', desc: 'Massive fire damage', damage: 50, type: 'fire', effect: { burn: 2 } }
-    ],
-    evolution: {
-      level: 18,
-      options: [
-        { id: 'flame_elemental', name: 'Flame Elemental', requires: { bonding: 40 } },
-        { id: 'phoenix_hatchling', name: 'Phoenix Hatchling', requires: { item: 'Phoenix Feather' } }
-      ]
-    },
-    catchRate: 65,
-    habitat: ['volcano', 'dungeon_floor_2'],
-    feedItems: ['Coal', 'Fire Gem']
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // UNCOMMON PETS - Moderate rarity
-  // ═══════════════════════════════════════════════════════════════
-  griffin_chick: {
-    id: 'griffin_chick',
-    name: 'Griffin Chick',
+  flame_fox: {
+    id: 'flame_fox',
+    name: 'Flame Fox',
+    emoji: '🦊🔥',
     rarity: 'uncommon',
-    type: 'mythical',
-    description: 'A young griffin with eagle wings and lion courage.',
-    emoji: '🦅',
-    baseStats: {
-      hp: 630,
-      atk: 60,
-      def: 40,
-      spd: 540
-    },
-    growthRates: {
-      hp: 42,
-      atk: 24,
-      def: 18,
-      spd: 90
-    },
+    role: 'attack',
+    type: 'fire',
+    description: 'A quick fox wreathed in flames. Burns whatever it bites.',
+    baseStats: { hp: 280, atk: 40, def: 12, spd: 70 },
+    growthRates: { hp: 20, atk: 12, def: 3, spd: 8 },
     abilities: [
-      { level: 1, name: 'Talon Strike', desc: 'Sharp claw attack', damage: 28, type: 'physical' },
-      { level: 5, name: 'Dive Bomb', desc: 'High-speed aerial attack', damage: 40, type: 'physical', effect: { stun: 1 } },
-      { level: 10, name: 'Screech', desc: 'Intimidate enemies', damage: 0, type: 'support', effect: { fear: 2 } },
-      { level: 15, name: 'Wing Gust', desc: 'Wind damage to all', damage: 35, type: 'wind', aoe: true }
+      { level: 1,  name: 'Fire Bite',  desc: 'Burns the enemy for 20 dmg',     damage: 20, type: 'fire', effect: { burn: 2 } },
+      { level: 5,  name: 'Flame Dash', desc: 'Charges through for 35 dmg',     damage: 35, type: 'fire' },
+      { level: 10, name: 'Inferno',    desc: 'Scorches for 60 dmg + 3t burn',  damage: 60, type: 'fire', effect: { burn: 3 } },
     ],
     evolution: {
-      level: 25,
+      level: 10,
       options: [
-        { id: 'royal_griffin', name: 'Royal Griffin', requires: { bonding: 70 } }
+        { id: 'nine_tail_fox', name: 'Nine-Tail Fox 🦊✨', requires: {} },
       ]
     },
     catchRate: 50,
-    habitat: ['mountain', 'sky_tower'],
-    feedItems: ['Meat', 'Fish']
+    habitat: ['volcano', 'dungeon_fire'],
   },
 
-  shadow_cat: {
-    id: 'shadow_cat',
-    name: 'Shadow Cat',
-    rarity: 'uncommon',
-    type: 'dark',
-    description: 'A feline that moves through shadows unseen.',
-    emoji: '🐈‍⬛',
-    baseStats: {
-      hp: 495,
-      atk: 70,
-      def: 30,
-      spd: 750
-    },
-    growthRates: {
-      hp: 30,
-      atk: 30,
-      def: 12,
-      spd: 120
-    },
-    abilities: [
-      { level: 1, name: 'Shadow Claw', desc: 'Dark physical attack', damage: 30, type: 'dark' },
-      { level: 5, name: 'Vanish', desc: 'Become invisible', damage: 0, type: 'support', effect: { dodge_next: true } },
-      { level: 10, name: 'Night Slash', desc: 'Critical dark attack', damage: 45, type: 'dark', effect: { crit: 100 } },
-      { level: 15, name: 'Shadow Realm', desc: 'Trap in darkness', damage: 35, type: 'dark', effect: { blind: 3 } }
-    ],
-    evolution: {
-      level: 22,
-      options: [
-        { id: 'void_panther', name: 'Void Panther', requires: { bonding: 60, nightBattles: 20 } }
-      ]
-    },
-    catchRate: 45,
-    habitat: ['dark_forest', 'dungeon_floor_3'],
-    feedItems: ['Shadow Essence', 'Meat']
-  },
-
-  thunder_lizard: {
-    id: 'thunder_lizard',
-    name: 'Thunder Lizard',
-    rarity: 'uncommon',
-    type: 'elemental',
-    description: 'A lizard crackling with electrical energy.',
-    emoji: '⚡',
-    baseStats: {
-      hp: 585,
-      atk: 70,
-      def: 20,
-      spd: 600
-    },
-    growthRates: {
-      hp: 36,
-      atk: 30,
-      def: 12,
-      spd: 90
-    },
-    abilities: [
-      { level: 1, name: 'Shock', desc: 'Electric jolt', damage: 32, type: 'lightning' },
-      { level: 5, name: 'Chain Lightning', desc: 'Hits multiple targets', damage: 28, type: 'lightning', aoe: true },
-      { level: 10, name: 'Thunder Wave', desc: 'Paralyze enemies', damage: 25, type: 'lightning', effect: { paralyze: 2 } },
-      { level: 15, name: 'Thunderbolt', desc: 'Massive electric damage', damage: 60, type: 'lightning' }
-    ],
-    evolution: {
-      level: 24,
-      options: [
-        { id: 'storm_dragon', name: 'Storm Dragon', requires: { bonding: 65, item: 'Storm Core' } }
-      ]
-    },
-    catchRate: 48,
-    habitat: ['storm_plains', 'dungeon_floor_4'],
-    feedItems: ['Electric Crystal', 'Metal']
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // RARE PETS - Hard to find
-  // ═══════════════════════════════════════════════════════════════
-  baby_dragon: {
-    id: 'baby_dragon',
-    name: 'Baby Dragon',
+  shadow_wolf: {
+    id: 'shadow_wolf',
+    name: 'Shadow Wolf',
+    emoji: '🐺🌑',
     rarity: 'rare',
-    type: 'dragon',
-    description: 'A young dragon with immense potential.',
-    emoji: '🐉',
-    baseStats: {
-      hp: 900,
-      atk: 90,
-      def: 60,
-      spd: 450
-    },
-    growthRates: {
-      hp: 60,
-      atk: 36,
-      def: 24,
-      spd: 60
-    },
+    role: 'attack',
+    type: 'shadow',
+    description: 'A wolf born in darkness. Its howl freezes enemies in fear.',
+    baseStats: { hp: 350, atk: 55, def: 20, spd: 80 },
+    growthRates: { hp: 30, atk: 14, def: 5, spd: 9 },
     abilities: [
-      { level: 1, name: 'Dragon Breath', desc: 'Fire breath attack', damage: 40, type: 'fire' },
-      { level: 5, name: 'Wing Buffet', desc: 'Strong wind attack', damage: 35, type: 'wind' },
-      { level: 10, name: 'Roar', desc: 'Terrifying roar', damage: 0, type: 'support', effect: { fear: 3, def_debuff: -20 } },
-      { level: 15, name: 'Dragon Rage', desc: 'Unleash fury', damage: 70, type: 'fire', effect: { burn: 2 } },
-      { level: 20, name: 'Ancient Power', desc: 'Draw on dragon heritage', damage: 55, type: 'dragon', effect: { atk_buff: 50, duration: 3 } }
+      { level: 1,  name: 'Shadow Bite',  desc: 'Rends for 30 dmg',              damage: 30, type: 'shadow' },
+      { level: 5,  name: 'Howl',         desc: '+20% ATK for 2 turns',          damage: 0,  type: 'buff', effect: { atkBuff: 20, duration: 2 } },
+      { level: 10, name: 'Void Strike',  desc: 'Deals 70 shadow damage',        damage: 70, type: 'shadow', effect: { blind: 1 } },
     ],
     evolution: {
-      level: 30,
+      level: 10,
       options: [
-        { id: 'fire_dragon', name: 'Fire Dragon', requires: { bonding: 80, item: 'Dragon Heart' } },
-        { id: 'ice_dragon', name: 'Ice Dragon', requires: { bonding: 80, item: 'Frozen Scale' } },
-        { id: 'lightning_dragon', name: 'Lightning Dragon', requires: { bonding: 80, item: 'Storm Scale' } }
+        { id: 'alpha_shadow_wolf', name: 'Alpha Shadow Wolf 🐺👑', requires: {} },
       ]
     },
     catchRate: 25,
-    habitat: ['dragon_lair', 'volcano'],
-    feedItems: ['Dragon Meat', 'Rare Gems']
+    habitat: ['shadow_realm', 'dungeon_deep'],
   },
 
-  celestial_fox: {
-    id: 'celestial_fox',
-    name: 'Celestial Fox',
-    rarity: 'rare',
-    type: 'divine',
-    description: 'A mystical fox blessed by the heavens.',
-    emoji: '🦊',
-    baseStats: {
-      hp: 720,
-      atk: 80,
-      def: 40,
-      spd: 900
-    },
-    growthRates: {
-      hp: 48,
-      atk: 36,
-      def: 18,
-      spd: 150
-    },
-    abilities: [
-      { level: 1, name: 'Mystic Flame', desc: 'Blue spirit fire', damage: 38, type: 'divine' },
-      { level: 5, name: 'Illusion', desc: 'Create illusions', damage: 0, type: 'support', effect: { dodge_all: 1 } },
-      { level: 10, name: 'Soul Steal', desc: 'Drain life force', damage: 45, type: 'divine', effect: { lifesteal: 50 } },
-      { level: 15, name: 'Nine Tails', desc: 'Unlock true power', damage: 60, type: 'divine', effect: { multi_hit: 3 } },
-      { level: 20, name: 'Divine Blessing', desc: 'Heal and empower', damage: 0, type: 'support', effect: { heal: 100, atk_buff: 40, duration: 4 } }
-    ],
-    evolution: {
-      level: 35,
-      options: [
-        { id: 'nine_tail_fox', name: 'Nine-Tail Fox', requires: { bonding: 90, purity: 100 } }
-      ]
-    },
-    catchRate: 20,
-    habitat: ['sacred_shrine', 'moonlit_grove'],
-    feedItems: ['Spirit Essence', 'Celestial Fruit']
-  },
-
-  frost_phoenix: {
-    id: 'frost_phoenix',
-    name: 'Frost Phoenix',
-    rarity: 'rare',
-    type: 'mythical',
-    description: 'A legendary bird of ice that never dies.',
-    emoji: '🦢',
-    baseStats: {
-      hp: 810,
-      atk: 100,
-      def: 50,
-      spd: 840
-    },
-    growthRates: {
-      hp: 54,
-      atk: 42,
-      def: 24,
-      spd: 120
-    },
-    abilities: [
-      { level: 1, name: 'Ice Shard', desc: 'Sharp ice projectile', damage: 42, type: 'ice' },
-      { level: 5, name: 'Blizzard', desc: 'Freezing storm', damage: 50, type: 'ice', effect: { freeze: 2 }, aoe: true },
-      { level: 10, name: 'Rebirth', desc: 'Revive from death once per battle', damage: 0, type: 'support', effect: { revive: 1 } },
-      { level: 15, name: 'Absolute Zero', desc: 'Ultimate ice attack', damage: 80, type: 'ice', effect: { freeze: 1, slow: 3 } },
-      { level: 20, name: 'Frozen Eternity', desc: 'Freeze time itself', damage: 70, type: 'ice', effect: { stun_all: 1 } }
-    ],
-    evolution: {
-      level: 40,
-      options: [
-        { id: 'eternal_phoenix', name: 'Eternal Phoenix', requires: { bonding: 95, deaths: 3 } }
-      ]
-    },
-    catchRate: 15,
-    habitat: ['frozen_tundra', 'ice_palace'],
-    feedItems: ['Ice Crystal', 'Phoenix Tears']
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // EPIC PETS - Very rare
-  // ═══════════════════════════════════════════════════════════════
-  chaos_golem: {
-    id: 'chaos_golem',
-    name: 'Chaos Golem',
+  lightning_drake: {
+    id: 'lightning_drake',
+    name: 'Lightning Drake',
+    emoji: '⚡🐉',
     rarity: 'epic',
-    type: 'construct',
-    description: 'A golem forged from pure chaos energy.',
-    emoji: '🗿',
-    baseStats: {
-      hp: 1350,
-      atk: 100,
-      def: 120,
-      spd: 300
-    },
-    growthRates: {
-      hp: 90,
-      atk: 42,
-      def: 48,
-      spd: 30
-    },
+    role: 'attack',
+    type: 'lightning',
+    description: 'A young dragon crackling with electricity. Storms follow it.',
+    baseStats: { hp: 450, atk: 80, def: 30, spd: 90 },
+    growthRates: { hp: 40, atk: 18, def: 7, spd: 10 },
     abilities: [
-      { level: 1, name: 'Stone Fist', desc: 'Crushing punch', damage: 50, type: 'physical' },
-      { level: 5, name: 'Fortify', desc: 'Increase defense', damage: 0, type: 'support', effect: { def_buff: 60, duration: 4 } },
-      { level: 10, name: 'Earthquake', desc: 'Shake the ground', damage: 65, type: 'earth', effect: { stun: 1 }, aoe: true },
-      { level: 15, name: 'Chaos Pulse', desc: 'Release chaotic energy', damage: 80, type: 'chaos', effect: { random_debuff: true } },
-      { level: 20, name: 'Unstoppable Force', desc: 'Ignore all defense', damage: 100, type: 'physical', effect: { penetration: 100 } }
+      { level: 1,  name: 'Thunder Bite',   desc: 'Deals 45 lightning dmg',       damage: 45, type: 'lightning' },
+      { level: 5,  name: 'Chain Lightning', desc: 'Hits for 60 + stuns 1t',      damage: 60, type: 'lightning', effect: { stun: 1 } },
+      { level: 10, name: 'Storm Breath',   desc: 'Devastates for 100 dmg',       damage: 100, type: 'lightning', effect: { stun: 2 } },
     ],
     evolution: {
-      level: 50,
+      level: 10,
       options: [
-        { id: 'titan_golem', name: 'Titan Golem', requires: { bonding: 100, item: 'Titan Core' } }
+        { id: 'storm_dragon', name: 'Storm Dragon ⚡🐲', requires: {} },
       ]
     },
     catchRate: 10,
-    habitat: ['chaos_realm', 'ancient_ruins'],
-    feedItems: ['Chaos Shard', 'Ancient Stone']
+    habitat: ['storm_peaks', 'ancient_dungeon'],
   },
 
-  void_serpent: {
-    id: 'void_serpent',
-    name: 'Void Serpent',
-    rarity: 'epic',
-    type: 'cosmic',
-    description: 'A serpent from the void between dimensions.',
-    emoji: '🐍',
-    baseStats: {
-      hp: 1080,
-      atk: 120,
-      def: 80,
-      spd: 1050
-    },
-    growthRates: {
-      hp: 72,
-      atk: 48,
-      def: 30,
-      spd: 180
-    },
+  // ─── SUPPORT PETS ────────────────────────────────────────────
+
+  forest_sprite: {
+    id: 'forest_sprite',
+    name: 'Forest Sprite',
+    emoji: '🌿✨',
+    rarity: 'common',
+    role: 'support',
+    type: 'nature',
+    description: 'A tiny spirit that heals wounds and blesses hunters.',
+    baseStats: { hp: 200, atk: 5, def: 10, spd: 50, healPower: 20 },
+    growthRates: { hp: 15, atk: 1, def: 3, spd: 4, healPower: 5 },
     abilities: [
-      { level: 1, name: 'Void Bite', desc: 'Drain existence', damage: 55, type: 'void' },
-      { level: 5, name: 'Dimensional Shift', desc: 'Phase out of reality', damage: 0, type: 'support', effect: { invulnerable: 1 } },
-      { level: 10, name: 'Black Hole', desc: 'Consume everything', damage: 75, type: 'void', effect: { lifesteal: 100 } },
-      { level: 15, name: 'Void Coil', desc: 'Constrict in void', damage: 60, type: 'void', effect: { paralyze: 2, bleed: 3 } },
-      { level: 20, name: 'Reality Collapse', desc: 'Shatter dimensions', damage: 120, type: 'void', effect: { penetration: 80 } }
+      { level: 1,  name: 'Heal',       desc: 'Restores 10% of your max HP',      damage: 0, type: 'heal',   healPct: 0.10 },
+      { level: 5,  name: 'Barrier',    desc: '+15 DEF for 2 turns',              damage: 0, type: 'buff',   effect: { defBuff: 15, duration: 2 } },
+      { level: 10, name: 'Full Bloom', desc: 'Restores 25% HP + removes 1 debuff', damage: 0, type: 'heal', healPct: 0.25, cleanse: true },
     ],
     evolution: {
-      level: 45,
+      level: 10,
       options: [
-        { id: 'world_serpent', name: 'World Serpent', requires: { bonding: 100, cosmicKnowledge: true } }
+        { id: 'ancient_treant', name: 'Ancient Treant 🌳', requires: {} },
+        { id: 'bloom_guardian', name: 'Bloom Guardian 🌸', requires: {} },
+      ]
+    },
+    catchRate: 70,
+    habitat: ['forest', 'dungeon_garden'],
+  },
+
+  wind_fairy: {
+    id: 'wind_fairy',
+    name: 'Wind Fairy',
+    emoji: '💨🧚',
+    rarity: 'common',
+    role: 'support',
+    type: 'wind',
+    description: 'A fairy that rides the wind. Boosts your speed and dodge.',
+    baseStats: { hp: 180, atk: 8, def: 8, spd: 90, healPower: 10 },
+    growthRates: { hp: 12, atk: 2, def: 2, spd: 10, healPower: 3 },
+    abilities: [
+      { level: 1,  name: 'Wind Boost', desc: '+20 SPD for 2 turns',       damage: 0, type: 'buff',   effect: { spdBuff: 20, duration: 2 } },
+      { level: 5,  name: 'Gale Ward',  desc: '+10% dodge for 3 turns',    damage: 0, type: 'buff',   effect: { dodgeBuff: 10, duration: 3 } },
+      { level: 10, name: 'Cyclone',    desc: 'Party ATK +15% for 3 turns',damage: 0, type: 'buff',   effect: { atkBuff: 15, duration: 3 } },
+    ],
+    evolution: {
+      level: 10,
+      options: [
+        { id: 'storm_sylph', name: 'Storm Sylph 🌪️', requires: {} },
+      ]
+    },
+    catchRate: 65,
+    habitat: ['sky', 'forest'],
+  },
+
+  crystal_phoenix: {
+    id: 'crystal_phoenix',
+    name: 'Crystal Phoenix',
+    emoji: '🔮🦅',
+    rarity: 'epic',
+    role: 'support',
+    type: 'holy',
+    description: 'A legendary bird of crystal. Can revive fallen hunters once.',
+    baseStats: { hp: 400, atk: 20, def: 40, spd: 60, healPower: 60 },
+    growthRates: { hp: 35, atk: 3, def: 10, spd: 5, healPower: 12 },
+    abilities: [
+      { level: 1,  name: 'Crystal Heal',  desc: 'Restores 20% HP',              damage: 0, type: 'heal',   healPct: 0.20 },
+      { level: 5,  name: 'Holy Barrier',  desc: 'Absorbs next hit completely',  damage: 0, type: 'shield', effect: { shield: 1 } },
+      { level: 10, name: 'Rebirth',       desc: 'Revives you at 30% HP (once)', damage: 0, type: 'revive', effect: { revive: 0.30, once: true } },
+    ],
+    evolution: {
+      level: 10,
+      options: [
+        { id: 'divine_phoenix', name: 'Divine Phoenix 🌟🦅', requires: {} },
       ]
     },
     catchRate: 8,
-    habitat: ['void_rift', 'cosmic_abyss'],
-    feedItems: ['Void Crystal', 'Star Dust']
+    habitat: ['holy_ground', 'ancient_dungeon'],
   },
 
-  // ═══════════════════════════════════════════════════════════════
-  // LEGENDARY PETS - Extremely rare, unique pets
-  // ═══════════════════════════════════════════════════════════════
-  primordial_beast: {
-    id: 'primordial_beast',
-    name: 'Primordial Beast',
-    rarity: 'legendary',
-    type: 'ancient',
-    description: 'The first beast, older than time itself.',
-    emoji: '👹',
-    baseStats: {
-      hp: 1800,
-      atk: 150,
-      def: 140,
-      spd: 1200
-    },
-    growthRates: {
-      hp: 120,
-      atk: 60,
-      def: 54,
-      spd: 210
-    },
+  // ─── SCAVENGER PETS ─────────────────────────────────────────
+  // Scavengers are WEAK and VULNERABLE — they die easily
+  // But they find extra gold/loot after every fight
+
+  mud_crawler: {
+    id: 'mud_crawler',
+    name: 'Mud Crawler',
+    emoji: '🪱',
+    rarity: 'common',
+    role: 'scavenger',
+    type: 'earth',
+    description: 'An ugly little creature that sniffs out treasure. Very fragile.',
+    baseStats: { hp: 100, atk: 5, def: 5, spd: 20, scavengeRate: 0.15 },
+    growthRates: { hp: 8, atk: 1, def: 1, spd: 2, scavengeRate: 0.02 },
     abilities: [
-      { level: 1, name: 'Primal Fury', desc: 'Unleash ancient power', damage: 80, type: 'ancient' },
-      { level: 10, name: 'Time Shatter', desc: 'Break the flow of time', damage: 100, type: 'time', effect: { stun_all: 2 } },
-      { level: 20, name: 'Genesis Roar', desc: 'The cry of creation', damage: 120, type: 'ancient', effect: { fear: 5, def_debuff: -50 } },
-      { level: 30, name: 'World Breaker', desc: 'Destroy everything', damage: 200, type: 'ancient', effect: { penetration: 100 }, aoe: true },
-      { level: 40, name: 'Primordial Ascension', desc: 'Transcend mortality', damage: 0, type: 'support', effect: { all_stats_buff: 100, duration: 5, invulnerable: 2 } }
+      { level: 1,  name: 'Dig',         desc: 'Finds 5-15% bonus gold after battle',  damage: 0, type: 'scavenge', goldBonus: 0.10 },
+      { level: 5,  name: 'Treasure Nose',desc: 'Chance to find rare item after fight', damage: 0, type: 'scavenge', itemChance: 0.10 },
+      { level: 10, name: 'Hoard Instinct',desc: '+25% gold from all sources',         damage: 0, type: 'scavenge', goldBonus: 0.25 },
     ],
-    evolution: null, // Already at peak form
-    catchRate: 1,
-    habitat: ['origin_realm'],
-    feedItems: ['Primordial Essence', 'Existence Shard']
-  }
+    evolution: {
+      level: 10,
+      options: [
+        { id: 'gold_beetle', name: 'Gold Beetle 🪲💰', requires: {} },
+      ]
+    },
+    catchRate: 75,
+    habitat: ['dungeon', 'cave'],
+    vulnerable: true, // can die in battle
+  },
+
+  void_bat: {
+    id: 'void_bat',
+    name: 'Void Bat',
+    emoji: '🦇🌑',
+    rarity: 'rare',
+    role: 'scavenger',
+    type: 'shadow',
+    description: 'A bat from the void. Finds rare loot but flees from combat.',
+    baseStats: { hp: 120, atk: 8, def: 5, spd: 100, scavengeRate: 0.25 },
+    growthRates: { hp: 10, atk: 2, def: 1, spd: 12, scavengeRate: 0.03 },
+    abilities: [
+      { level: 1,  name: 'Echo Sense',   desc: '+20% item drop rate after fights',   damage: 0, type: 'scavenge', dropBonus: 0.20 },
+      { level: 5,  name: 'Shadow Loot',  desc: 'Chance to double gold drops',        damage: 0, type: 'scavenge', goldDouble: 0.15 },
+      { level: 10, name: 'Void Harvest', desc: 'Find rare/epic items more often',    damage: 0, type: 'scavenge', rarityBoost: true },
+    ],
+    evolution: {
+      level: 10,
+      options: [
+        { id: 'void_dragon_bat', name: 'Void Dragon Bat 🦇🐉', requires: {} },
+      ]
+    },
+    catchRate: 20,
+    habitat: ['shadow_realm', 'deep_dungeon'],
+    vulnerable: true,
+  },
+
+  stone_golem_baby: {
+    id: 'stone_golem_baby',
+    name: 'Stone Golem Baby',
+    emoji: '🪨🤏',
+    rarity: 'common',
+    role: 'scavenger',
+    type: 'earth',
+    description: 'A tiny golem that collects shiny rocks and minerals.',
+    baseStats: { hp: 150, atk: 10, def: 20, spd: 15, scavengeRate: 0.12 },
+    growthRates: { hp: 12, atk: 2, def: 5, spd: 1, scavengeRate: 0.015 },
+    abilities: [
+      { level: 1,  name: 'Collect',      desc: '+10% crystals after dungeons',        damage: 0, type: 'scavenge', crystalBonus: 0.10 },
+      { level: 5,  name: 'Mine',         desc: 'Find crafting materials after fights',damage: 0, type: 'scavenge', materialFind: true },
+      { level: 10, name: 'Stone Hoard',  desc: '+20% crystals + materials',           damage: 0, type: 'scavenge', crystalBonus: 0.20, materialFind: true },
+    ],
+    evolution: {
+      level: 10,
+      options: [
+        { id: 'crystal_golem', name: 'Crystal Golem 💎🪨', requires: {} },
+      ]
+    },
+    catchRate: 70,
+    habitat: ['cave', 'mine', 'dungeon'],
+    vulnerable: false, // golems are tanky even as scavengers
+  },
+
+  // ─── EVOLVED FORMS ───────────────────────────────────────────
+
+  king_slime: {
+    id: 'king_slime', name: 'King Slime', emoji: '👑🟢', rarity: 'uncommon', role: 'attack', type: 'basic',
+    description: 'The royal slime. Commands other slimes to fight for it.',
+    baseStats: { hp: 600, atk: 55, def: 35, spd: 45 },
+    growthRates: { hp: 40, atk: 14, def: 8, spd: 5 },
+    abilities: [
+      { level: 1, name: 'Royal Slam', desc: 'Deals 50 damage', damage: 50, type: 'physical' },
+      { level: 5, name: 'Summon Slimes', desc: 'Deals 30 dmg x2', damage: 30, type: 'physical', hits: 2 },
+      { level: 10, name: 'Crown Crush', desc: 'Deals 90 damage', damage: 90, type: 'physical' },
+    ],
+    catchRate: 0, habitat: [],
+  },
+
+  nine_tail_fox: {
+    id: 'nine_tail_fox', name: 'Nine-Tail Fox', emoji: '🦊✨', rarity: 'rare', role: 'attack', type: 'fire',
+    description: 'Ancient fox spirit. Each tail channels a different element.',
+    baseStats: { hp: 550, atk: 90, def: 30, spd: 95 },
+    growthRates: { hp: 35, atk: 20, def: 6, spd: 10 },
+    abilities: [
+      { level: 1, name: 'Fox Fire', desc: 'Deals 60 fire damage', damage: 60, type: 'fire', effect: { burn: 3 } },
+      { level: 5, name: 'Nine Flames', desc: 'Hits 3x for 30 each', damage: 30, type: 'fire', hits: 3 },
+      { level: 10, name: 'Soul Blaze', desc: 'Deals 120 damage', damage: 120, type: 'fire', effect: { burn: 4 } },
+    ],
+    catchRate: 0, habitat: [],
+  },
+
+  ancient_treant: {
+    id: 'ancient_treant', name: 'Ancient Treant', emoji: '🌳✨', rarity: 'rare', role: 'support', type: 'nature',
+    description: 'A wise old tree spirit. Heals massively and shields the party.',
+    baseStats: { hp: 800, atk: 10, def: 80, spd: 20, healPower: 80 },
+    growthRates: { hp: 60, atk: 1, def: 18, spd: 2, healPower: 15 },
+    abilities: [
+      { level: 1, name: 'Ancient Heal', desc: 'Restores 30% HP', damage: 0, type: 'heal', healPct: 0.30 },
+      { level: 5, name: 'Root Ward', desc: 'DEF +30 for 3 turns', damage: 0, type: 'buff', effect: { defBuff: 30, duration: 3 } },
+      { level: 10, name: 'Forest Sanctuary', desc: 'Heal 40% HP + full DEF buff', damage: 0, type: 'heal', healPct: 0.40, effect: { defBuff: 40, duration: 3 } },
+    ],
+    catchRate: 0, habitat: [],
+  },
+
+  gold_beetle: {
+    id: 'gold_beetle', name: 'Gold Beetle', emoji: '🪲💰', rarity: 'uncommon', role: 'scavenger', type: 'earth',
+    description: 'Covered in golden shell. Sniffs out treasure anywhere.',
+    baseStats: { hp: 200, atk: 8, def: 30, spd: 25, scavengeRate: 0.30 },
+    growthRates: { hp: 15, atk: 1, def: 7, spd: 2, scavengeRate: 0.04 },
+    abilities: [
+      { level: 1, name: 'Gold Sense', desc: '+25% gold after every fight', damage: 0, type: 'scavenge', goldBonus: 0.25 },
+      { level: 5, name: 'Beetle Dig', desc: 'Find materials and potions', damage: 0, type: 'scavenge', materialFind: true, potionFind: true },
+      { level: 10, name: 'Golden Hoard', desc: '+40% gold + rare item chance', damage: 0, type: 'scavenge', goldBonus: 0.40, itemChance: 0.20 },
+    ],
+    catchRate: 0, habitat: [], vulnerable: true,
+  },
 };
 
-// ═══════════════════════════════════════════════════════════════
-// PET FOOD DATABASE
-// ═══════════════════════════════════════════════════════════════
+// ── PET FOOD DATABASE ─────────────────────────────────────────
 const PET_FOOD = {
-  'Gel': { bonding: 1, happiness: 2, rarity: 'common' },
-  'Water': { bonding: 1, happiness: 1, rarity: 'common' },
-  'Meat': { bonding: 2, happiness: 3, rarity: 'common' },
-  'Bone': { bonding: 1, happiness: 2, rarity: 'common' },
-  'Coal': { bonding: 2, happiness: 2, rarity: 'common' },
-  'Fish': { bonding: 2, happiness: 3, rarity: 'common' },
-  'Fire Gem': { bonding: 5, happiness: 5, rarity: 'uncommon' },
-  'Electric Crystal': { bonding: 5, happiness: 5, rarity: 'uncommon' },
-  'Metal': { bonding: 3, happiness: 2, rarity: 'uncommon' },
-  'Shadow Essence': { bonding: 6, happiness: 6, rarity: 'rare' },
-  'Dragon Meat': { bonding: 10, happiness: 10, rarity: 'rare' },
-  'Rare Gems': { bonding: 8, happiness: 8, rarity: 'rare' },
-  'Spirit Essence': { bonding: 12, happiness: 12, rarity: 'epic' },
-  'Celestial Fruit': { bonding: 15, happiness: 15, rarity: 'epic' },
-  'Ice Crystal': { bonding: 10, happiness: 10, rarity: 'epic' },
-  'Phoenix Tears': { bonding: 20, happiness: 20, rarity: 'legendary' },
-  'Chaos Shard': { bonding: 15, happiness: 15, rarity: 'epic' },
-  'Ancient Stone': { bonding: 12, happiness: 10, rarity: 'epic' },
-  'Void Crystal': { bonding: 18, happiness: 18, rarity: 'legendary' },
-  'Star Dust': { bonding: 20, happiness: 20, rarity: 'legendary' },
-  'Primordial Essence': { bonding: 30, happiness: 30, rarity: 'mythic' },
-  'Existence Shard': { bonding: 25, happiness: 25, rarity: 'mythic' }
+  meat:         { name: 'Meat',          emoji: '🥩', hungerRestore: 30, bondingBonus: 5,  xpBonus: 10, cost: 500 },
+  fish:         { name: 'Fish',          emoji: '🐟', hungerRestore: 25, bondingBonus: 8,  xpBonus: 15, cost: 400 },
+  herb:         { name: 'Herb',          emoji: '🌿', hungerRestore: 20, bondingBonus: 3,  xpBonus: 5,  cost: 200 },
+  magic_berry:  { name: 'Magic Berry',   emoji: '🫐', hungerRestore: 40, bondingBonus: 15, xpBonus: 30, cost: 2000 },
+  elixir:       { name: 'Pet Elixir',    emoji: '⚗️', hungerRestore: 60, bondingBonus: 20, xpBonus: 50, cost: 5000 },
+  bone:         { name: 'Bone',          emoji: '🦴', hungerRestore: 20, bondingBonus: 6,  xpBonus: 8,  cost: 300 },
+  crystal_shard:{ name: 'Crystal Shard', emoji: '💎', hungerRestore: 35, bondingBonus: 25, xpBonus: 60, cost: 8000 },
 };
 
-module.exports = {
-  PET_DATABASE,
-  PET_FOOD
-};
+// ── HELPER: roll a random egg type based on weights ───────────
+function rollEggType() {
+  const total = Object.values(EGG_SPAWN_WEIGHTS).reduce((a, b) => a + b, 0);
+  let roll = Math.random() * total;
+  for (const [eggId, weight] of Object.entries(EGG_SPAWN_WEIGHTS)) {
+    roll -= weight;
+    if (roll <= 0) return eggId;
+  }
+  return 'common_egg';
+}
+
+// ── HELPER: hatch egg into a random pet of that egg type ──────
+function hatchEgg(eggId) {
+  const eggDef = EGG_TYPES[eggId];
+  if (!eggDef) return null;
+  const pool = eggDef.possiblePets;
+  const petId = pool[Math.floor(Math.random() * pool.length)];
+  return PET_DATABASE[petId] || null;
+}
+
+module.exports = { PET_DATABASE, PET_FOOD, EGG_TYPES, EGG_SPAWN_WEIGHTS, rollEggType, hatchEgg };

@@ -1,519 +1,372 @@
-// ═══════════════════════════════════════════════════════════════
-// PET MANAGER - Pet System Handler
-// ═══════════════════════════════════════════════════════════════
+// PetManager.js — Full Pet System with Eggs, Roles, Scavenging, Support
 
-const { PET_DATABASE, PET_FOOD } = require('./PetDatabase');
-const fs = require('fs').promises;
+const { PET_DATABASE, PET_FOOD, EGG_TYPES, rollEggType, hatchEgg } = require('./PetDatabase');
+const fs   = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 
 class PetManager {
   constructor() {
-    // Use DATA_DIR env var if set (fly.io volume), else fall back to local rpg/data/
     const dataDir = process.env.DATA_DIR
-      ? require('path').join(process.env.DATA_DIR, 'rpg_data')
-      : require('path').join(__dirname, '../data');
-    require('fs').mkdirSync(dataDir, { recursive: true });
-    this.petsFile = require('path').join(dataDir, 'playerPets.json');
+      ? path.join(process.env.DATA_DIR, 'rpg_data')
+      : path.join(__dirname, '../data');
+    fsSync.mkdirSync(dataDir, { recursive: true });
+    this.petsFile   = path.join(dataDir, 'playerPets.json');
     this.playerPets = new Map();
-    this.init();
+    this._loaded    = false;
+    this._init();
   }
 
-  async init() {
+  _init() {
     try {
-      const data = await fs.readFile(this.petsFile, 'utf8');
-      const pets = JSON.parse(data);
-      this.playerPets = new Map(Object.entries(pets));
-    } catch (error) {
+      const raw = fsSync.readFileSync(this.petsFile, 'utf8');
+      const obj = JSON.parse(raw);
+      this.playerPets = new Map(Object.entries(obj));
+      this._loaded = true;
+    } catch(e) {
       this.playerPets = new Map();
+      this._loaded = true;
     }
   }
 
-  async save() {
+  save() {
     try {
       const obj = Object.fromEntries(this.playerPets);
-      await fs.writeFile(this.petsFile, JSON.stringify(obj, null, 2));
-    } catch (error) {
-      console.error('Failed to save pets:', error);
-    }
+      fsSync.writeFileSync(this.petsFile, JSON.stringify(obj, null, 2));
+    } catch(e) { console.error('PetManager save error:', e.message); }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // GET PLAYER PET DATA
-  // ═══════════════════════════════════════════════════════════════
   getPlayerData(playerId) {
     if (!this.playerPets.has(playerId)) {
-      this.playerPets.set(playerId, {
-        pets: [],
-        activePet: null,
-        storage: []
-      });
+      this.playerPets.set(playerId, { pets: [], eggs: [], activePet: null, storage: [] });
     }
-    return this.playerPets.get(playerId);
+    const d = this.playerPets.get(playerId);
+    if (!d.eggs) d.eggs = [];
+    return d;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ATTEMPT TO CATCH A PET
-  // ═══════════════════════════════════════════════════════════════
-  attemptCatch(playerId, petId, bonusRate = 0, guaranteed = false) {
-    const petTemplate = PET_DATABASE[petId];
-    if (!petTemplate) {
-      return { success: false, message: '❌ Unknown pet!' };
-    }
-
-    const playerData = this.getPlayerData(playerId);
-
-    // Check pet limit (max 20 pets)
-    if (playerData.pets.length >= 20) {
-      return { success: false, message: '❌ Your pet storage is full! (Max 20 pets)' };
-    }
-
-    // Guaranteed catch (Paladin / owner)
-    if (guaranteed) {
-      const newPet = this.createPet(petTemplate);
-      playerData.pets.push(newPet);
-      if (!playerData.activePet) playerData.activePet = newPet.instanceId;
-      this.save();
-      return { success: true, message: `✨ Guaranteed capture! You caught ${petTemplate.name}!`, pet: newPet, isFirstPet: playerData.pets.length === 1 };
-    }
-
-    // Harder base catch rates (halved from template), bonus from luck potions
-    const baseRate = Math.max(5, (petTemplate.catchRate || 50) * 0.5);
-    const catchRate = Math.min(85, baseRate + bonusRate);
-    const roll = Math.random() * 100;
-
-    if (roll > catchRate) {
-      return {
-        success: false,
-        message: `💨 ${petTemplate.name} broke free! (${Math.floor(catchRate)}% chance)`,
-        almostCaught: roll <= catchRate + 10
-      };
-    }
-
-    // Successfully caught!
-    const newPet = this.createPet(petTemplate);
-    playerData.pets.push(newPet);
-
-    // Auto-set as active if no active pet
-    if (!playerData.activePet) {
-      playerData.activePet = newPet.instanceId;
-    }
-
-    this.save();
-
-    return {
-      success: true,
-      message: `✨ You caught ${petTemplate.name}!`,
-      pet: newPet,
-      isFirstPet: playerData.pets.length === 1
-    };
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // CREATE A NEW PET INSTANCE
-  // ═══════════════════════════════════════════════════════════════
+  // ── CREATE PET INSTANCE ────────────────────────────────────
   createPet(template) {
     return {
-      instanceId: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-      id: template.id,
-      name: template.name,
-      nickname: null,
-      rarity: template.rarity,
-      type: template.type,
-      emoji: template.emoji,
-      level: 1,
-      exp: 0,
-      stats: { ...template.baseStats },
-      bonding: 0, // 0-100 bonding level
-      happiness: 100, // 0-100 happiness
-      hunger: 0, // 0-100 hunger (higher = more hungry)
-      lastFed: Date.now(),
-      battles: 0,
-      wins: 0,
-      defeats: 0,
-      abilities: template.abilities.filter(a => a.level <= 1), // Start with level 1 abilities
-      evolution: template.evolution,
-      acquiredDate: Date.now()
+      instanceId:   `${Date.now()}_${Math.random().toString(36).substr(2,9)}`,
+      id:           template.id,
+      name:         template.name,
+      nickname:     null,
+      rarity:       template.rarity,
+      role:         template.role || 'attack',
+      type:         template.type,
+      emoji:        template.emoji,
+      level:        1,
+      exp:          0,
+      stats:        { ...template.baseStats },
+      bonding:      0,
+      happiness:    100,
+      hunger:       0,
+      lastFed:      Date.now(),
+      battles:      0,
+      wins:         0,
+      defeats:      0,
+      abilities:    template.abilities.filter(a => a.level <= 1),
+      evolution:    template.evolution || null,
+      vulnerable:   template.vulnerable || false,
+      acquiredDate: Date.now(),
     };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // FEED A PET
-  // ═══════════════════════════════════════════════════════════════
-  feedPet(playerId, petInstanceId, foodItem) {
-    const playerData = this.getPlayerData(playerId);
-    const pet = playerData.pets.find(p => p.instanceId === petInstanceId);
+  // ── EGG SYSTEM ────────────────────────────────────────────
 
-    if (!pet) {
-      return { success: false, message: '❌ Pet not found!' };
-    }
-
-    // Case-insensitive food lookup
-    const foodKey = Object.keys(PET_FOOD).find(k => k.toLowerCase() === foodItem.toLowerCase());
-    const food = foodKey ? PET_FOOD[foodKey] : null;
-    if (!food) {
-      const foodList = Object.keys(PET_FOOD).join(', ');
-      return { success: false, message: `❌ Unknown food: "${foodItem}"\n\nAvailable: ${foodList}` };
-    }
-
-    // Check if pet likes this food
-    const petTemplate = PET_DATABASE[pet.id];
-    const preferredFood = (petTemplate?.feedItems || []).map(f => f.toLowerCase());
-    const isPreferred = preferredFood.includes(foodKey.toLowerCase());
-
-    // Calculate bonding and happiness gain
-    let bondingGain = food.bonding;
-    let happinessGain = food.happiness;
-
-    if (isPreferred) {
-      bondingGain *= 2;
-      happinessGain *= 1.5;
-    }
-
-    // Apply gains
-    pet.bonding = Math.min(100, pet.bonding + bondingGain);
-    pet.happiness = Math.min(100, pet.happiness + happinessGain);
-    pet.hunger = Math.max(0, pet.hunger - 50);
-    pet.lastFed = Date.now();
-
+  // Give player a random egg (called by dungeon/spawn system)
+  giveEgg(playerId, eggId = null) {
+    const pd = this.getPlayerData(playerId);
+    if (pd.eggs.length >= 5) return { success: false, message: '❌ Egg bag full! (Max 5 eggs)' };
+    const id = eggId || rollEggType();
+    const egg = EGG_TYPES[id];
+    if (!egg) return { success: false, message: '❌ Unknown egg type!' };
+    const eggInstance = {
+      instanceId: `egg_${Date.now()}_${Math.random().toString(36).substr(2,6)}`,
+      eggId: id,
+      name: egg.name,
+      emoji: egg.emoji,
+      rarity: egg.rarity,
+      desc: egg.desc,
+      hatchLevel: egg.hatchLevel,
+      obtainedAt: Date.now(),
+    };
+    pd.eggs.push(eggInstance);
     this.save();
+    return { success: true, egg: eggInstance, message: `🥚 You found a *${egg.name}*!\n${egg.desc}\nHatch it with /pet hatch [#]` };
+  }
 
+  // Hatch an egg into a pet
+  hatchEgg(playerId, eggIndex) {
+    const pd = this.getPlayerData(playerId);
+    if (!pd.eggs[eggIndex]) return { success: false, message: '❌ No egg at that slot!' };
+    if (pd.pets.length >= 20) return { success: false, message: '❌ Pet storage full! (Max 20)' };
+    const eggInst = pd.eggs[eggIndex];
+    const template = hatchEgg(eggInst.eggId);
+    if (!template) return { success: false, message: '❌ Egg hatching failed!' };
+    const newPet = this.createPet(template);
+    pd.pets.push(newPet);
+    pd.eggs.splice(eggIndex, 1);
+    if (!pd.activePet) pd.activePet = newPet.instanceId;
+    this.save();
     return {
       success: true,
-      message: isPreferred 
-        ? `${pet.emoji} ${pet.nickname || pet.name} loved the ${foodKey}! ❤️`
-        : `${pet.emoji} ${pet.nickname || pet.name} ate the ${foodKey}.`,
-      bondingGain,
-      happinessGain,
-      pet
+      pet: newPet,
+      isFirstPet: pd.pets.length === 1,
+      message: `🐣 The egg hatched!\n${newPet.emoji} *${newPet.name}* appeared!\nRole: *${newPet.role.toUpperCase()}*\n\nLevel up your pet to evolve it!`,
     };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // GAIN PET EXPERIENCE
-  // ═══════════════════════════════════════════════════════════════
-  gainExp(playerId, petInstanceId, expAmount, won = true) {
-    const playerData = this.getPlayerData(playerId);
-    const pet = playerData.pets.find(p => p.instanceId === petInstanceId);
+  // ── CATCH A PET DIRECTLY (from dungeon encounter) ──────────
+  attemptCatch(playerId, petId, bonusRate = 0, guaranteed = false) {
+    const petTemplate = PET_DATABASE[petId];
+    if (!petTemplate) return { success: false, message: '❌ Unknown pet!' };
+    const pd = this.getPlayerData(playerId);
+    if (pd.pets.length >= 20) return { success: false, message: '❌ Pet storage full! (Max 20)' };
 
+    if (guaranteed) {
+      const newPet = this.createPet(petTemplate);
+      pd.pets.push(newPet);
+      if (!pd.activePet) pd.activePet = newPet.instanceId;
+      this.save();
+      return { success: true, pet: newPet, isFirstPet: pd.pets.length === 1, message: `✨ Guaranteed catch! You caught ${petTemplate.name}!` };
+    }
+
+    const baseRate = Math.max(5, (petTemplate.catchRate || 50) * 0.5);
+    const catchRate = Math.min(85, baseRate + bonusRate);
+    if (Math.random() * 100 > catchRate) {
+      return { success: false, message: `💨 ${petTemplate.name} broke free! (${Math.floor(catchRate)}% chance)` };
+    }
+
+    const newPet = this.createPet(petTemplate);
+    pd.pets.push(newPet);
+    if (!pd.activePet) pd.activePet = newPet.instanceId;
+    this.save();
+    return { success: true, pet: newPet, isFirstPet: pd.pets.length === 1, message: `✨ You caught ${petTemplate.name}!` };
+  }
+
+  // ── PET EXP & LEVEL UP ────────────────────────────────────
+  addPetExp(playerId, petInstanceId, expAmount, won = true) {
+    const pd = this.getPlayerData(playerId);
+    const pet = pd.pets.find(p => p.instanceId === petInstanceId);
     if (!pet) return null;
 
+    const template = PET_DATABASE[pet.id];
     pet.exp += expAmount;
-    pet.battles += 1;
-    if (won) pet.wins += 1;
-    else pet.defeats += 1;
+    pet.battles++;
+    if (won) pet.wins++; else pet.defeats++;
 
     const levelsGained = [];
-    const template = PET_DATABASE[pet.id];
-
-    // Check for level ups
-    while (pet.exp >= this.getExpRequirement(pet.level)) {
-      pet.exp -= this.getExpRequirement(pet.level);
-      pet.level += 1;
+    while (pet.exp >= this.getExpReq(pet.level)) {
+      pet.exp -= this.getExpReq(pet.level);
+      pet.level++;
       levelsGained.push(pet.level);
-
-      // Increase stats
-      pet.stats.hp += template.growthRates.hp;
-      pet.stats.atk += template.growthRates.atk;
-      pet.stats.def += template.growthRates.def;
-      pet.stats.spd += template.growthRates.spd;
-
-      // Learn new abilities
-      const newAbilities = template.abilities.filter(a => 
-        a.level === pet.level && !pet.abilities.find(learned => learned.name === a.name)
-      );
-      pet.abilities.push(...newAbilities);
-
-      // Check for evolution
-      if (pet.evolution && pet.level >= pet.evolution.level) {
-        // Evolution available but not automatic
+      if (template) {
+        pet.stats.hp  += template.growthRates.hp  || 10;
+        pet.stats.atk += template.growthRates.atk || 3;
+        pet.stats.def += template.growthRates.def || 2;
+        pet.stats.spd += template.growthRates.spd || 2;
+        if (template.growthRates.healPower && pet.stats.healPower) pet.stats.healPower += template.growthRates.healPower;
+        if (template.growthRates.scavengeRate && pet.stats.scavengeRate) pet.stats.scavengeRate += template.growthRates.scavengeRate;
+        // Unlock new abilities
+        const newAbs = template.abilities.filter(a => a.level === pet.level && !pet.abilities.find(x => x.name === a.name));
+        pet.abilities.push(...newAbs);
       }
     }
-
     this.save();
-
-    return {
-      pet,
-      levelsGained,
-      newAbilities: levelsGained.length > 0 ? pet.abilities.filter(a => 
-        levelsGained.includes(a.level)
-      ) : []
-    };
+    return { pet, levelsGained };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // GET EXP REQUIREMENT FOR LEVEL
-  // ═══════════════════════════════════════════════════════════════
-  getExpRequirement(level) {
-    return Math.floor(50 * Math.pow(level, 1.5));
-  }
+  getExpReq(level) { return Math.floor(50 * Math.pow(level, 1.5)); }
 
-  // ═══════════════════════════════════════════════════════════════
-  // EVOLVE A PET
-  // ═══════════════════════════════════════════════════════════════
+  // ── EVOLVE PET ────────────────────────────────────────────
   evolvePet(playerId, petInstanceId, evolutionChoice) {
-    const playerData = this.getPlayerData(playerId);
-    const pet = playerData.pets.find(p => p.instanceId === petInstanceId);
-
-    if (!pet) {
-      return { success: false, message: '❌ Pet not found!' };
-    }
-
-    if (!pet.evolution) {
-      return { success: false, message: '❌ This pet cannot evolve!' };
-    }
-
-    if (pet.level < pet.evolution.level) {
-      return { success: false, message: `❌ Pet must be level ${pet.evolution.level} to evolve!` };
-    }
-
-    const evolutionOption = pet.evolution.options.find(opt => opt.id === evolutionChoice);
-    if (!evolutionOption) {
-      return { success: false, message: '❌ Invalid evolution choice!' };
-    }
-
-    // Check requirements
-    if (evolutionOption.requires.bonding && pet.bonding < evolutionOption.requires.bonding) {
-      return {
-        success: false,
-        message: `❌ Requires ${evolutionOption.requires.bonding} bonding! (Current: ${pet.bonding})`
-      };
-    }
-
-    // Evolve the pet
+    const pd = this.getPlayerData(playerId);
+    const pet = pd.pets.find(p => p.instanceId === petInstanceId);
+    if (!pet) return { success: false, message: '❌ Pet not found!' };
+    if (!pet.evolution) return { success: false, message: '❌ This pet cannot evolve!' };
+    if (pet.level < pet.evolution.level) return { success: false, message: `❌ Need level ${pet.evolution.level} to evolve!` };
+    const opt = pet.evolution.options.find(o => o.id === evolutionChoice);
+    if (!opt) return { success: false, message: '❌ Invalid evolution choice!' };
     const newTemplate = PET_DATABASE[evolutionChoice];
-    if (!newTemplate) {
-      return { success: false, message: '❌ Evolution data not found!' };
-    }
-
+    if (!newTemplate) return { success: false, message: '❌ Evolution data missing!' };
     const oldName = pet.name;
-    
-    // Update pet with new evolution
     pet.id = newTemplate.id;
     pet.name = newTemplate.name;
     pet.emoji = newTemplate.emoji;
     pet.rarity = newTemplate.rarity;
+    pet.role = newTemplate.role || pet.role;
     pet.type = newTemplate.type;
-    pet.evolution = newTemplate.evolution;
-
-    // Boost stats
-    pet.stats.hp += 20;
-    pet.stats.atk += 10;
-    pet.stats.def += 8;
-    pet.stats.spd += 5;
-
-    // Learn evolution abilities
-    pet.abilities = [...pet.abilities, ...newTemplate.abilities.filter(a => a.level <= pet.level)];
-
+    pet.evolution = newTemplate.evolution || null;
+    pet.vulnerable = newTemplate.vulnerable || false;
+    // Big stat boost on evolution
+    pet.stats.hp  += 80;
+    pet.stats.atk += 25;
+    pet.stats.def += 15;
+    pet.stats.spd += 10;
+    pet.abilities = [...pet.abilities, ...newTemplate.abilities.filter(a => a.level <= pet.level && !pet.abilities.find(x => x.name === a.name))];
     this.save();
-
-    return {
-      success: true,
-      message: `🌟 ${oldName} evolved into ${newTemplate.name}!`,
-      pet,
-      newAbilities: newTemplate.abilities.filter(a => a.level <= pet.level)
-    };
+    return { success: true, message: `🌟 *${oldName}* evolved into *${newTemplate.name}*! 🎉\nRole: ${newTemplate.role?.toUpperCase() || 'UNKNOWN'}`, pet };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // SET ACTIVE PET
-  // ═══════════════════════════════════════════════════════════════
-  setActivePet(playerId, petInstanceId) {
-    const playerData = this.getPlayerData(playerId);
-    const pet = playerData.pets.find(p => p.instanceId === petInstanceId);
-
-    if (!pet) {
-      return { success: false, message: '❌ Pet not found!' };
-    }
-
-    playerData.activePet = petInstanceId;
+  // ── FEED PET ──────────────────────────────────────────────
+  feedPet(playerId, petInstanceId, foodName) {
+    const pd = this.getPlayerData(playerId);
+    const pet = pd.pets.find(p => p.instanceId === petInstanceId);
+    if (!pet) return { success: false, message: '❌ Pet not found!' };
+    const foodKey = foodName.toLowerCase().replace(' ', '_');
+    const food = PET_FOOD[foodKey] || Object.values(PET_FOOD).find(f => f.name.toLowerCase() === foodName.toLowerCase());
+    if (!food) return { success: false, message: `❌ Unknown food: ${foodName}\nSee /pet foods` };
+    pet.hunger    = Math.max(0, pet.hunger    - food.hungerRestore);
+    pet.happiness = Math.min(100, pet.happiness + Math.floor(food.bondingBonus * 0.5));
+    pet.bonding   = Math.min(100, pet.bonding   + food.bondingBonus);
+    pet.exp      += food.xpBonus;
+    pet.lastFed   = Date.now();
     this.save();
-
-    return {
-      success: true,
-      message: `${pet.emoji} ${pet.nickname || pet.name} is now your active pet!`,
-      pet
-    };
+    return { success: true, message: `${pet.emoji} *${pet.nickname || pet.name}* enjoyed the ${food.name}!\n💕 Bonding +${food.bondingBonus} | 😊 Happiness up | 🍖 Hunger -${food.hungerRestore}\n✨ +${food.xpBonus} EXP` };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // GET ACTIVE PET
-  // ═══════════════════════════════════════════════════════════════
-  getActivePet(playerId) {
-    const playerData = this.getPlayerData(playerId);
-    if (!playerData.activePet) return null;
-
-    return playerData.pets.find(p => p.instanceId === playerData.activePet);
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // RENAME PET
-  // ═══════════════════════════════════════════════════════════════
-  renamePet(playerId, petInstanceId, newNickname) {
-    const playerData = this.getPlayerData(playerId);
-    const pet = playerData.pets.find(p => p.instanceId === petInstanceId);
-
-    if (!pet) {
-      return { success: false, message: '❌ Pet not found!' };
-    }
-
-    if (newNickname.length > 20) {
-      return { success: false, message: '❌ Nickname must be 20 characters or less!' };
-    }
-
-    pet.nickname = newNickname;
-    this.save();
-
-    return {
-      success: true,
-      message: `✅ Pet renamed to "${newNickname}"!`,
-      pet
-    };
-  }  // ✅ REMOVED COMMA HERE
-
-  // ═══════════════════════════════════════════════════════════════
-  // RELEASE A PET
-  // ═══════════════════════════════════════════════════════════════
-  releasePet(playerId, petInstanceId) {
-    const playerData = this.getPlayerData(playerId);
-    const petIndex = playerData.pets.findIndex(p => p.instanceId === petInstanceId);
-
-    if (petIndex === -1) {
-      return { success: false, message: '❌ Pet not found!' };
-    }
-
-    const pet = playerData.pets[petIndex];
-    playerData.pets.splice(petIndex, 1);
-
-    // Clear active pet if it was released
-    if (playerData.activePet === petInstanceId) {
-      playerData.activePet = playerData.pets.length > 0 ? playerData.pets[0].instanceId : null;
-    }
-
-    this.save();
-
-    return {
-      success: true,
-      message: `👋 You released ${pet.emoji} ${pet.nickname || pet.name}. It waves goodbye...`
-    };
-  }  // ✅ REMOVED COMMA HERE
-
-  // ═══════════════════════════════════════════════════════════════
-  // UPDATE HUNGER SYSTEM
-  // ═══════════════════════════════════════════════════════════════
-  updateHunger(playerId) {
-    const playerData = this.getPlayerData(playerId);
-    const now = Date.now();
-    const hoursPassed = (now - (playerData.lastHungerCheck || now)) / (1000 * 60 * 60);
-
-    if (hoursPassed < 1) return; // Update once per hour
-
-    playerData.pets.forEach(pet => {
-      // Increase hunger over time
-      pet.hunger = Math.min(100, pet.hunger + (hoursPassed * 5));
-
-      // Decrease happiness if very hungry
-      if (pet.hunger > 70) {
-        pet.happiness = Math.max(0, pet.happiness - (hoursPassed * 2));
-      }
-    });
-
-    playerData.lastHungerCheck = now;
-    this.save();
-  }  // ✅ REMOVED COMMA HERE
-
-  // ═══════════════════════════════════════════════════════════════
-  // PET ASSIST IN BATTLE
-  // ═══════════════════════════════════════════════════════════════
+  // ── BATTLE BONUSES ────────────────────────────────────────
   getPetBattleBonus(playerId) {
     const pet = this.getActivePet(playerId);
     if (!pet) return null;
+    const bondMod = pet.bonding / 100;
+    const happMod = pet.happiness / 100;
+    const total   = (bondMod + happMod) / 2;
 
-    // Bonus based on bonding and happiness
-    const bondingBonus = pet.bonding / 100;
-    const happinessBonus = pet.happiness / 100;
-    const totalBonus = (bondingBonus + happinessBonus) / 2;
+    if (pet.role === 'scavenger') {
+      // Scavengers don't fight — they just scavenge
+      return {
+        pet, bonuses: { atk: 0, def: 0, spd: 0 },
+        scavengeBonus: pet.stats.scavengeRate || 0.10,
+        canUseAbility: false,
+        isScavenger: true,
+      };
+    }
 
+    if (pet.role === 'support') {
+      return {
+        pet,
+        bonuses: { atk: 0, def: Math.floor(pet.stats.def * total * 0.3), spd: 0 },
+        healBonus: Math.floor((pet.stats.healPower || 10) * total),
+        canUseAbility: pet.happiness > 30 && pet.hunger < 80,
+        isSupport: true,
+      };
+    }
+
+    // Attack pet
     return {
       pet,
       bonuses: {
-        atk: Math.floor(pet.stats.atk * totalBonus * 0.45),
-        def: Math.floor(pet.stats.def * totalBonus * 0.45),
-        spd: Math.floor(pet.stats.spd * totalBonus * 0.45)
+        atk: Math.floor(pet.stats.atk * total * 0.45),
+        def: Math.floor(pet.stats.def * total * 0.30),
+        spd: Math.floor(pet.stats.spd * total * 0.20),
       },
-      canUseAbility: pet.happiness > 30 && pet.hunger < 80
+      canUseAbility: pet.happiness > 30 && pet.hunger < 80,
+      isAttack: true,
     };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // USE PET ABILITY IN BATTLE
-  // ═══════════════════════════════════════════════════════════════
   usePetAbility(playerId, abilityIndex = 0) {
     const pet = this.getActivePet(playerId);
     if (!pet) return null;
-
-    if (pet.happiness < 30) {
-      return {
-        success: false,
-        message: `${pet.emoji} ${pet.nickname || pet.name} is too unhappy to help!`
-      };
-    }
-
-    if (pet.hunger > 80) {
-      return {
-        success: false,
-        message: `${pet.emoji} ${pet.nickname || pet.name} is too hungry to fight!`
-      };
-    }
-
+    if (pet.happiness < 30) return { success: false, message: `${pet.emoji} Too unhappy to help!` };
+    if (pet.hunger > 80)    return { success: false, message: `${pet.emoji} Too hungry to help!` };
     const ability = pet.abilities[abilityIndex];
-    if (!ability) {
-      return {
-        success: false,
-        message: '❌ Pet doesn\'t know that ability!'
-      };
-    }
-
-    // Reduce happiness slightly after using ability
+    if (!ability) return { success: false, message: '❌ No ability!' };
     pet.happiness = Math.max(0, pet.happiness - 5);
     this.save();
-
-    // Apply 45% of original ability damage (55% reduction)
-    const scaledAbility = ability.damage > 0
-      ? { ...ability, damage: Math.floor(ability.damage * 0.45) }
-      : ability;
-
-    return {
-      success: true,
-      ability: scaledAbility,
-      pet,
-      message: `${pet.emoji} ${pet.nickname || pet.name} used ${ability.name}!`
-    };
+    const scaled = ability.damage > 0 ? { ...ability, damage: Math.floor(ability.damage * 0.45) } : ability;
+    return { success: true, ability: scaled, pet, message: `${pet.emoji} *${pet.nickname || pet.name}* used *${ability.name}*!` };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // GET PET STATS STRING
-  // ═══════════════════════════════════════════════════════════════
+  // Get scavenger gold/loot bonus after a fight
+  getScavengeReward(playerId, baseGold) {
+    const pb = this.getPetBattleBonus(playerId);
+    if (!pb?.isScavenger) return { goldBonus: 0, findItem: false };
+    const rate = pb.scavengeBonus;
+    const goldBonus = Math.floor(baseGold * rate);
+    const findItem  = Math.random() < (pb.pet.stats.scavengeRate || 0.10) * 0.5;
+    return { goldBonus, findItem, pet: pb.pet };
+  }
+
+  // Get support pet heal amount (called after player takes damage)
+  getSupportHeal(playerId, playerMaxHp) {
+    const pb = this.getPetBattleBonus(playerId);
+    if (!pb?.isSupport || !pb.canUseAbility) return 0;
+    // Support pet heals a % of max HP each turn
+    const healPct = (pb.healBonus / 100) * 0.05; // 5% of healPower as % of maxHp
+    return Math.floor(playerMaxHp * Math.min(0.10, healPct)); // cap at 10% per turn
+  }
+
+  // ── OTHER METHODS ─────────────────────────────────────────
+  getActivePet(playerId) {
+    const pd = this.getPlayerData(playerId);
+    if (!pd.activePet) return null;
+    return pd.pets.find(p => p.instanceId === pd.activePet) || null;
+  }
+
+  setActivePet(playerId, petInstanceId) {
+    const pd = this.getPlayerData(playerId);
+    const pet = pd.pets.find(p => p.instanceId === petInstanceId);
+    if (!pet) return { success: false, message: '❌ Pet not found!' };
+    pd.activePet = petInstanceId;
+    this.save();
+    return { success: true, message: `${pet.emoji} *${pet.nickname || pet.name}* is now your active pet!\nRole: *${pet.role?.toUpperCase() || 'ATTACK'}*` };
+  }
+
+  renamePet(playerId, petInstanceId, name) {
+    const pd = this.getPlayerData(playerId);
+    const pet = pd.pets.find(p => p.instanceId === petInstanceId);
+    if (!pet) return { success: false, message: '❌ Pet not found!' };
+    if (name.length > 20) return { success: false, message: '❌ Max 20 characters!' };
+    pet.nickname = name;
+    this.save();
+    return { success: true, message: `✅ Renamed to "${name}"!` };
+  }
+
+  releasePet(playerId, petInstanceId) {
+    const pd = this.getPlayerData(playerId);
+    const idx = pd.pets.findIndex(p => p.instanceId === petInstanceId);
+    if (idx === -1) return { success: false, message: '❌ Pet not found!' };
+    const pet = pd.pets[idx];
+    pd.pets.splice(idx, 1);
+    if (pd.activePet === petInstanceId) pd.activePet = pd.pets[0]?.instanceId || null;
+    this.save();
+    return { success: true, message: `👋 Released ${pet.emoji} ${pet.nickname || pet.name}.` };
+  }
+
+  updateHunger(playerId) {
+    const pd = this.getPlayerData(playerId);
+    const now = Date.now();
+    const hrs = (now - (pd.lastHungerCheck || now)) / 3600000;
+    if (hrs < 1) return;
+    pd.pets.forEach(pet => {
+      pet.hunger    = Math.min(100, pet.hunger + hrs * 5);
+      if (pet.hunger > 70) pet.happiness = Math.max(0, pet.happiness - hrs * 2);
+    });
+    pd.lastHungerCheck = now;
+    this.save();
+  }
+
+  getPlayerPets(playerId) { return this.getPlayerData(playerId).pets; }
+  getPlayerEggs(playerId)  { return this.getPlayerData(playerId).eggs; }
+
   getPetStatsString(pet) {
-    const expReq = this.getExpRequirement(pet.level);
-    const expPercent = Math.floor((pet.exp / expReq) * 100);
-
-    let stats = `${pet.emoji} *${pet.nickname || pet.name}*\n`;
-    stats += `Level ${pet.level} | ${pet.rarity.toUpperCase()}\n`;
-    stats += `Type: ${pet.type}\n\n`;
-
-    stats += `❤️ HP: ${pet.stats.hp}\n`;
-    stats += `⚔️ ATK: ${pet.stats.atk}\n`;
-    stats += `🛡️ DEF: ${pet.stats.def}\n`;
-    stats += `⚡ SPD: ${pet.stats.spd}\n\n`;
-
-    stats += `📊 EXP: ${pet.exp}/${expReq} (${expPercent}%)\n`;
-    stats += `💕 Bonding: ${pet.bonding}/100\n`;
-    stats += `😊 Happiness: ${pet.happiness}/100\n`;
-    stats += `🍖 Hunger: ${pet.hunger}/100\n\n`;
-
-    stats += `⚔️ Battles: ${pet.battles} (${pet.wins}W/${pet.defeats}L)\n`;
-
-    return stats;
+    const expReq = this.getExpReq(pet.level);
+    const expPct = Math.floor((pet.exp / expReq) * 100);
+    const roleEmoji = { attack: '⚔️', support: '💚', scavenger: '💰' }[pet.role] || '⚔️';
+    let s = `${pet.emoji} *${pet.nickname || pet.name}* ${roleEmoji}\n`;
+    s += `Lv.${pet.level} | ${pet.rarity.toUpperCase()} | ${pet.role?.toUpperCase()}\n\n`;
+    s += `❤️ HP: ${pet.stats.hp} | ⚔️ ATK: ${pet.stats.atk}\n`;
+    s += `🛡️ DEF: ${pet.stats.def} | ⚡ SPD: ${pet.stats.spd}\n`;
+    if (pet.stats.healPower) s += `💚 Heal Power: ${pet.stats.healPower}\n`;
+    if (pet.stats.scavengeRate) s += `🔍 Scavenge: +${Math.floor(pet.stats.scavengeRate * 100)}% gold\n`;
+    s += `\n📊 EXP: ${pet.exp}/${expReq} (${expPct}%)\n`;
+    s += `💕 Bonding: ${pet.bonding}/100 | 😊 ${pet.happiness}/100 | 🍖 ${pet.hunger}/100\n`;
+    if (pet.evolution) s += `\n🌟 Evolves at Lv.${pet.evolution.level}`;
+    return s;
   }
 }
 
