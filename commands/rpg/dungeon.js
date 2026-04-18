@@ -10,7 +10,6 @@ let DC; try { DC = require('../../rpg/utils/DailyChallenges'); } catch(e) {}
 const DungeonPartyManager = require('../../rpg/dungeons/DungeonPartyManager');
 const ImprovedCombat    = require('../../rpg/utils/ImprovedCombat');
 let BuffManager; try { BuffManager = require('../../rpg/utils/BuffManager'); } catch(e) {}
-let ArtifactSystem; try { ArtifactSystem = require('../../rpg/utils/ArtifactSystem'); } catch(e) {}
 const StatusEffectManager = require('../../rpg/utils/StatusEffectManager');
 const BarSystem         = require('../../rpg/utils/BarSystem');
 const LevelUpManager    = require('../../rpg/utils/LevelUpManager');
