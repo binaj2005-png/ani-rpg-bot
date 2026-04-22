@@ -99,9 +99,33 @@ Build the strongest guild!
         });
       }
 
+      // ── SL GUILD CREATION — AUTHORIZED MASTERS ONLY ──────────
+      // Only players in db.authorizedGuildMasters (set by bot owner) can create guilds.
+      // Bot owner can also always create.
+      if (!db.authorizedGuildMasters) db.authorizedGuildMasters = [];
+      const BOT_OWNER = db.botOwner || '194592469209292@lid';
+      const isOwner = sender === BOT_OWNER || db.superAdmins?.includes(sender);
+      const isAuthorized = isOwner || db.authorizedGuildMasters.includes(sender);
+
+      if (!isAuthorized) {
+        return sock.sendMessage(chatId, {
+          text: [
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            `🏰 *GUILD CREATION RESTRICTED*`,
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            ``,
+            `Guild creation is restricted to *authorized guild masters* only.`,
+            `Only 5 guild masters can exist at a time.`,
+            ``,
+            `Contact the server admin if you believe you should be authorized.`,
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+          ].join('\n')
+        });
+      }
+
       // Check if player is already in a guild
       const playerGuild = Object.values(db.guilds).find(g => 
-        g.members && g.members.some(m => m.id === sender)
+        g.members && g.members.some(m => m.id === sender || m === sender)
       );
 
       if (playerGuild) {
@@ -116,46 +140,17 @@ Build the strongest guild!
       );
 
       if (existingGuild) {
+        return sock.sendMessage(chatId, { text: '❌ Guild name already taken!' });
+      }
+
+      // Mana Stone cost (no gold)
+      const crystalCost = isOwner ? 0 : 5000;
+      if (!isOwner && (player.manaCrystals || 0) < crystalCost) {
         return sock.sendMessage(chatId, {
-          text: '❌ Guild name already taken!'
+          text: `❌ Not enough Mana Stones!\nNeed: ${crystalCost.toLocaleString()} 💎\nHave: ${(player.manaCrystals || 0).toLocaleString()} 💎`
         });
       }
-
-      // Bot owner bypass — can create guild anytime with no cost
-      const BOT_OWNER = '194592469209292@lid';
-      const isOwner = sender === BOT_OWNER;
-
-      // Level requirement
-      if (!isOwner && (player.level || 1) < 20) {
-        return sock.sendMessage(chatId, {
-          text: `❌ You must be *Level 20* to create a guild!\n\n📊 Your Level: ${player.level || 1}/20`
-        });
-      }
-
-      // Check gold & crystals
-      const goldCost = 500000;
-      const crystalCost = 10000;
-      const playerGold = player.gold || 0;
-      const playerCrystals = player.manaCrystals || 0;
-
-      if (!isOwner && playerGold < goldCost) {
-        return sock.sendMessage(chatId, {
-          text: `❌ Not enough gold!\n\n💰 Need: ${goldCost.toLocaleString()} gold\n💰 Have: ${playerGold.toLocaleString()} gold`
-        });
-      }
-
-      if (!isOwner && playerCrystals < crystalCost) {
-        return sock.sendMessage(chatId, {
-          text: `❌ Not enough Mana Crystals!\n\n💎 Need: ${crystalCost.toLocaleString()} crystals\n💎 Have: ${playerCrystals.toLocaleString()} crystals`
-        });
-      }
-
-      // Deduct gold & crystals (owner gets it free)
-      if (!isOwner) {
-        player.gold = playerGold - goldCost;
-        player.manaCrystals = playerCrystals - crystalCost;
-        if (player.inventory) player.inventory.gold = player.gold;
-      }
+      if (!isOwner) player.manaCrystals = (player.manaCrystals || 0) - crystalCost;
 
       // Create guild
       const guildId = `guild_${Date.now()}`;
@@ -163,12 +158,8 @@ Build the strongest guild!
         id: guildId,
         name: guildName,
         leader: sender,
-        members: [{
-          id: sender,
-          name: player.name || 'Unknown',
-          rank: 'Leader',
-          joinedAt: Date.now()
-        }],
+        members: [sender],
+        memberData: [{ id: sender, name: player.name || 'Unknown', rank: 'Guild Master', joinedAt: Date.now() }],
         treasury: 0,
         level: 1,
         xp: 0,
@@ -176,8 +167,17 @@ Build the strongest guild!
         totalRaids: 0,
         totalWars: 0,
         wins: 0,
-        buffs: []
+        buffs: [],
+        gatesOwned: [],
       };
+
+      // Update player
+      player.guild = guildName;
+      player.guildJoinedAt = Date.now();
+
+      // Aura reward for founding
+      const { AuraSystem } = require('../../rpg/utils/AuraSystem');
+      const auraResult = AuraSystem.addAura(player, 'guildFounder');
 
       saveDatabase();
 

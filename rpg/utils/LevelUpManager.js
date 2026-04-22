@@ -1,9 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
-// LEVEL UP MANAGER - Integrated with SkillDescriptions.js
+// LEVEL UP MANAGER - Solo Leveling Edition
 // ═══════════════════════════════════════════════════════════════
 
 const SkillDescriptions = require('./SkillDescriptions');
-const StatAllocationSystem = require('./StatAllocationSystem'); // ✅ UPGRADE POINTS
+const StatAllocationSystem = require('./StatAllocationSystem');
+const { getXpRequired, checkClassAssignment, getStatPointsOnLevelUp, AWAKENING_RANKS } = require('./SoloLevelingCore');
+const { AuraSystem } = require('./AuraSystem');
 
 class LevelUpManager {
   static checkAndApplyLevelUps(player, saveDatabase, sock, chatId) {
@@ -15,10 +17,12 @@ class LevelUpManager {
     let levelsGained = 0;
     const newSkills = [];
     const skillUnlockLevels = [];
-    let totalUPAwarded = 0; // ✅ Track total UP awarded
+    let totalUPAwarded = 0;
+    let classAssigned = null; // Track if a class was assigned this level-up
 
     while (true) {
-      const xpNeeded = Math.floor(200 * Math.pow(player.level, 1.8));
+      // ── SL XP FORMULA: ~1M XP to reach level 5, billions for level 50 ──
+      const xpNeeded = getXpRequired(player.level);
 
       if (player.xp >= xpNeeded) {
         player.level++;
@@ -60,23 +64,43 @@ class LevelUpManager {
           };
         }
 
-        player.stats.maxHp    += 10;
-        player.stats.maxEnergy += 5;
-        player.stats.atk      += 3;
-        player.stats.def      += 2;
-        player.stats.hp = Math.min(player.stats.maxHp, player.stats.hp + 10);
-        player.stats.energy = Math.min(player.stats.maxEnergy, player.stats.energy + 5);
+        // ── Rank-based stat gains per level ──────────────────────
+        const rank = player.awakenRank || 'E';
+        const rankMult = { E:1.0, D:1.1, C:1.2, B:1.35, A:1.55, S:1.8 }[rank] || 1.0;
+        const hpGain     = Math.floor(10 * rankMult);
+        const atkGain    = Math.floor(3  * rankMult);
+        const defGain    = Math.floor(2  * rankMult);
+        const energyGain = Math.floor(5  * rankMult);
 
-        player.baseStats.hp       = (player.baseStats.hp       || 0) + 10;
-        player.baseStats.maxEnergy = (player.baseStats.maxEnergy || 0) + 5;
-        player.baseStats.atk      = (player.baseStats.atk      || 0) + 3;
-        player.baseStats.def      = (player.baseStats.def      || 0) + 2;
+        player.stats.maxHp     += hpGain;
+        player.stats.maxEnergy += energyGain;
+        player.stats.atk       += atkGain;
+        player.stats.def       += defGain;
+        player.stats.hp = Math.min(player.stats.maxHp, player.stats.hp + hpGain);
+        player.stats.energy = Math.min(player.stats.maxEnergy, player.stats.energy + energyGain);
+
+        player.baseStats.hp        = (player.baseStats.hp        || 0) + hpGain;
+        player.baseStats.maxEnergy = (player.baseStats.maxEnergy  || 0) + energyGain;
+        player.baseStats.atk       = (player.baseStats.atk        || 0) + atkGain;
+        player.baseStats.def       = (player.baseStats.def        || 0) + defGain;
 
         levelsGained++;
 
-        // ✅ AWARD UPGRADE POINTS FOR LEVEL UP
+        // ── Award upgrade points (rank-scaled) ───────────────────
         const upReward = StatAllocationSystem.awardUpgradePoints(player, 'levelUp');
         totalUPAwarded += upReward.awarded;
+
+        // ── Check for class assignment (if no class yet) ──────────
+        if (!player.class) {
+          const assignedClass = checkClassAssignment(player);
+          if (assignedClass) {
+            player.class = assignedClass;
+            player.classAssignedAt = Date.now();
+            classAssigned = assignedClass;
+            // Aura bonus for getting a class
+            AuraSystem.addAura(player, 'classUnlock');
+          }
+        }
 
         // Check for skill unlock at level 5, 10, 15, 20, 25, etc.
         if (player.level % 5 === 0) {
@@ -107,18 +131,20 @@ class LevelUpManager {
       console.log(`✨ ${player.name} leveled up ${levelsGained} time(s) to Level ${player.level}`);
       
       if (sock && chatId) {
-        // ✅ Pass totalUPAwarded to notification
-        this.sendLevelUpNotification(player, levelsGained, newSkills, skillUnlockLevels, totalUPAwarded, sock, chatId);
+        this.sendLevelUpNotification(player, levelsGained, newSkills, skillUnlockLevels, totalUPAwarded, classAssigned, sock, chatId);
 
-        // ── Milestone group announcements (#12) ─────────────────
+        // ── Milestone group announcements ────────────────────────
         const MILESTONES = [10, 25, 50, 75, 100];
         const hitMilestone = MILESTONES.find(m => player.level >= m && player.level - levelsGained < m);
         if (hitMilestone && chatId.endsWith('@g.us')) {
           const milestoneEmojis = { 10:'🌱', 25:'⚡', 50:'🔥', 75:'💎', 100:'👑' };
-          const cls = player.class?.name || player.class || 'Hunter';
+          const cls = player.class || 'Unawakened';
+          const rank = player.awakenRank || 'E';
+          const rankData = AWAKENING_RANKS[rank];
           try {
+            const { calculatePowerRating } = require('./SoloLevelingCore');
             sock.sendMessage(chatId, {
-              text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${milestoneEmojis[hitMilestone]} *LEVEL MILESTONE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🎉 *${player.name}* [${cls}] just reached *Level ${hitMilestone}!*\n\nCongratulations, Hunter! 🏆\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+              text: `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${milestoneEmojis[hitMilestone]} *LEVEL MILESTONE!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🎉 *${player.name}* [${rankData?.emoji || ''} ${rank}-Rank | ${cls}]\nhas reached *Level ${hitMilestone}!*\n\n⚡ Power: ${calculatePowerRating(player.stats || {}).toLocaleString()}\n✨ Aura: ${(player.aura || 0).toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
             });
           } catch(e) {}
         }
@@ -129,7 +155,8 @@ class LevelUpManager {
       leveledUp: levelsGained > 0,
       levelsGained,
       newSkills,
-      upgradePointsAwarded: totalUPAwarded // ✅ Return UP awarded
+      upgradePointsAwarded: totalUPAwarded,
+      classAssigned,
     };
   }
 
@@ -564,75 +591,66 @@ class LevelUpManager {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // SEND LEVEL UP NOTIFICATION - ✅ WITH UPGRADE POINTS
+  // SEND LEVEL UP NOTIFICATION — Solo Leveling System style
   // ═══════════════════════════════════════════════════════════════
-  static async sendLevelUpNotification(player, levelsGained, newSkills, skillUnlockLevels, totalUPAwarded, sock, chatId) {
-    let message = `━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎉 LEVEL UP! 🎉
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⭐ Level ${player.level - levelsGained} → ${player.level}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 STAT INCREASES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❤️ HP: +${10 * levelsGained}
-⚔️ ATK: +${3 * levelsGained}
-🛡️ DEF: +${2 * levelsGained}
-${player.energyColor || '💙'} ${player.energyType || 'Energy'}: +${5 * levelsGained}
-💎 Upgrade Points: +${totalUPAwarded}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  static async sendLevelUpNotification(player, levelsGained, newSkills, skillUnlockLevels, totalUPAwarded, classAssigned, sock, chatId) {
+    const rank = player.awakenRank || 'E';
+    const rankData = AWAKENING_RANKS[rank];
+    const rankMult = { E:1.0, D:1.1, C:1.2, B:1.35, A:1.55, S:1.8 }[rank] || 1.0;
+    const hpGain  = Math.floor(10 * rankMult * levelsGained);
+    const atkGain = Math.floor(3  * rankMult * levelsGained);
+    const defGain = Math.floor(2  * rankMult * levelsGained);
+    const engGain = Math.floor(5  * rankMult * levelsGained);
 
-    if (newSkills.length > 0) {
-      message += `\n✨ NEW SKILLS UNLOCKED! ✨
-━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    const lines = [
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `「System」 *LEVEL UP*`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      ``,
+      `${rankData?.emoji || '⚫'} *${player.name}* [${rank}-Rank]`,
+      `⭐ Level *${player.level - levelsGained}* → *${player.level}*`,
+      ``,
+      `📊 *STAT INCREASES:*`,
+      `❤️  HP:     +${hpGain}  → ${player.stats?.maxHp}`,
+      `⚔️  ATK:    +${atkGain}  → ${player.stats?.atk}`,
+      `🛡️  DEF:    +${defGain}  → ${player.stats?.def}`,
+      `💙  Energy: +${engGain}  → ${player.stats?.maxEnergy}`,
+      `📈  Upgrade Points: +${totalUPAwarded}`,
+      ``,
+    ];
 
-      newSkills.forEach((skill, i) => {
-        message += `\n🔮 ${skill.name} (Lv.${skillUnlockLevels[i]})\n`;
-        message += `   💥 DMG: ${skill.damage}\n`;
-        message += `   ${player.energyColor || '💙'} Cost: ${skill.energyCost}\n`;
-        message += `   ⏰ Cooldown: ${skill.cooldown}s\n`;
-      });
-
-      const slotsFilled = player.skills?.active?.length || 0;
-      const slotsMax = 5;
-      
-      message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 SKILL STATUS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 Equipped: ${slotsFilled}/${slotsMax} slots
-━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-
-      if (slotsFilled < slotsMax) {
-        message += `\n✅ Skills auto-equipped!\n`;
-      } else {
-        const availableCount = player.availableSkills?.length || 0;
-        message += `\n⚠️ All slots full!\n`;
-        message += `📚 ${availableCount} skill(s) in library\n\n`;
-        message += `📌 MANAGE SKILLS:\n`;
-        message += `/skills - View all skills\n`;
-        message += `/skills forget [#] - Remove skill\n`;
-        message += `/skills learn [#] - Learn new skill\n`;
-      }
-
-      message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-    } else {
-      const nextSkillLevel = Math.ceil(player.level / 5) * 5;
-      if (nextSkillLevel <= 90) {
-        message += `\n💡 Next skill unlocks at Level ${nextSkillLevel}!`;
-      } else {
-        message += `\nKeep fighting to grow stronger!`;
-      }
-      
-      // ✅ ADD UPGRADE POINTS TIP
-      message += `\n\n💡 Use /upgrade to allocate your points!`;
-      // Note pending skill choice
-      if (player.pendingSkillChoice) {
-        message += `\n\n🌟 *SKILL CHOICE PENDING!*\nUse /choose to pick your specialization!`;
-      }
-      message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    // Class assignment notification — the big moment
+    if (classAssigned) {
+      lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      lines.push(`‼️ *CLASS AWAKENING*`);
+      lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      lines.push(`「System」 The system has recognized your path.`);
+      lines.push(``);
+      lines.push(`🎭 *${classAssigned}*`);
+      lines.push(`Your class has been assigned.`);
+      lines.push(`Skills will unlock as you level up.`);
+      lines.push(`+200 ✨ Aura awarded.`);
+      lines.push(``);
     }
 
+    if (newSkills.length > 0) {
+      lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      lines.push(`✨ *NEW SKILL UNLOCKED*`);
+      lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      newSkills.forEach((skill, i) => {
+        lines.push(`🔮 *${skill.name}*`);
+        lines.push(`   💥 DMG: ${skill.damage}  |  💙 Cost: ${skill.energyCost}  |  ⏱ CD: ${skill.cooldown}s`);
+      });
+      lines.push(``);
+    }
+
+    lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lines.push(`💡 /upgrade — allocate your points`);
+    if (!player.class) lines.push(`🎭 Keep leveling — your class awaits`);
+    lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
     try {
-      await sock.sendMessage(chatId, { text: message });
+      await sock.sendMessage(chatId, { text: lines.join('\n') });
     } catch (error) {
       console.error('❌ Failed to send level up notification:', error.message);
     }
@@ -643,15 +661,9 @@ ${player.energyColor || '💙'} ${player.energyType || 'Energy'}: +${5 * levelsG
   // ═══════════════════════════════════════════════════════════════
   static getXPProgress(player) {
     if (!player) return { current: 0, needed: 100, percent: 0 };
-
-    const xpNeeded = Math.floor(200 * Math.pow(player.level, 1.8));
+    const xpNeeded = getXpRequired(player.level || 1);
     const percent = Math.floor((player.xp / xpNeeded) * 100);
-
-    return {
-      current: player.xp,
-      needed: xpNeeded,
-      percent: Math.min(100, percent)
-    };
+    return { current: player.xp, needed: xpNeeded, percent: Math.min(100, percent) };
   }
 }
 

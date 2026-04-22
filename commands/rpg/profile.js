@@ -1,111 +1,126 @@
-let ArtifactSystem; try { ArtifactSystem = require('../../rpg/utils/ArtifactSystem'); } catch(e) {}
-const PlayerMigration = require('../../rpg/utils/PlayerMigration');
-const ProfileCard     = require('../../rpg/utils/ProfileCard');
-let AchievementManager; try { AchievementManager = require('../../rpg/utils/AchievementManager'); } catch(e) {}
+// ═══════════════════════════════════════════════════════════════
+// PROFILE — Solo Leveling Hunter Profile
+// Shows rank, power rating, aura, class, stats, gear, gate history
+// ═══════════════════════════════════════════════════════════════
+
+const { calculatePowerRating, getPowerLabel, AWAKENING_RANKS, getXpRequired } = require('../../rpg/utils/SoloLevelingCore');
+const { AuraSystem } = require('../../rpg/utils/AuraSystem');
+const LevelUpManager = require('../../rpg/utils/LevelUpManager');
+
+function buildBar(current, max, length = 10) {
+  const filled = Math.round(Math.min(current, max) / max * length);
+  return `[${'█'.repeat(filled)}${'░'.repeat(length - filled)}]`;
+}
 
 module.exports = {
   name: 'profile',
-  description: '👤 View player profile card',
-  usage: '/profile [@user]',
-  category: 'rpg',
+  aliases: ['p', 'stats', 'me', 'hunter'],
+  description: '📋 View your hunter profile',
 
   async execute(sock, msg, args, getDatabase, saveDatabase, sender) {
-    const chatId = msg.key.remoteJid;
+    const chatId = msg.key?.remoteJid;
     const db = getDatabase();
 
-    let targetId = sender;
-    const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-    if (mentionedJid) {
-      targetId = mentionedJid;
-    } else if (args[0]) {
-      const searchTerm = args.join(' ').toLowerCase().replace('@', '');
-      for (const userId in db.users) {
-        const u = db.users[userId];
-        if (u.name?.toLowerCase().includes(searchTerm) || userId.includes(searchTerm)) {
-          targetId = userId; break;
-        }
-      }
+    // Allow viewing another player's profile
+    const mentionedId = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+    const targetId = mentionedId || sender;
+    const player = db.users[targetId];
+
+    if (!player) {
+      return sock.sendMessage(chatId, {
+        text: mentionedId ? '❌ That player is not registered.' : '❌ You are not registered! Use /register'
+      }, { quoted: msg });
     }
 
-    const playerRaw = db.users[targetId];
-    if (!playerRaw) {
-      return sock.sendMessage(chatId, { text: '❌ Player not found!\nUse: /profile [@user] or /profile [name]' }, { quoted: msg });
-    }
-
-    const player = PlayerMigration.migratePlayer(playerRaw);
-    db.users[targetId] = player;
-
-    const SUPER_USERS = ['221951679328499@lid', '194592469209292@lid'];
-    const isSuperUser = SUPER_USERS.includes(sender);
-    const isViewingOwn = sender === targetId;
-    if (player.profileLocked && !isViewingOwn && !isSuperUser) {
-      return sock.sendMessage(chatId, { text: `🔒 *${player.name}* has locked their profile.` }, { quoted: msg });
-    }
-
-    if (AchievementManager) {
-      try {
-        AchievementManager.track(player, 'level_reached', player.level || 1);
-        AchievementManager.track(player, 'pvp_wins', player.pvpWins || 0);
-        AchievementManager.track(player, 'gold_accumulated', player.gold || 0);
-      } catch(e) {}
-    }
-    saveDatabase();
-
-    try {
-      const cardBuffer = await ProfileCard.generateProfileCard(player);
-      if (cardBuffer) {
-        const className = typeof player.class === 'string' ? player.class : (player.class?.name || 'Hunter');
-        const elo = player.pvpElo || 1000;
-        const pvpWins = player.pvpWins || 0;
-        const pvpLosses = player.pvpLosses || 0;
-        const achCount = player.achievements?.unlocked?.length || 0;
-        const caption =
-          `👤 *${player.name}* — Lv.${player.level||1} ${className}\n` +
-          `💰 ${(player.gold||0).toLocaleString()}g  |  ⚔️ ELO ${elo}  |  🏅 ${achCount} achievements\n` +
-          `📊 ${pvpWins}W / ${pvpLosses}L\n\n` +
-          `💡 /stats • /skills • /inventory • /artifact`;
-        return sock.sendMessage(chatId, { image: cardBuffer, caption, mentions: [targetId] }, { quoted: msg });
-      }
-    } catch(e) {
-      console.error('[Profile] Canvas error:', e.message);
-    }
-
-    // Text fallback
-    const className = typeof player.class === 'string' ? player.class : (player.class?.name || 'Unclassed');
-    const lvl = player.level || 1;
+    const rank = player.awakenRank || 'E';
+    const rankData = AWAKENING_RANKS[rank];
     const stats = player.stats || {};
-    const xpNeeded = Math.floor(200 * Math.pow(lvl, 1.8));
-    const xpPct = Math.floor(Math.min(100, ((player.xp||0)/xpNeeded)*100));
-    const pvpWins = player.pvpWins || 0;
-    const pvpLosses = player.pvpLosses || 0;
-    const pvpTotal = pvpWins + pvpLosses;
-    const wr = pvpTotal > 0 ? Math.floor((pvpWins/pvpTotal)*100) : 0;
-    const bossKills = typeof player.bossesDefeated === 'object'
-      ? Object.keys(player.bossesDefeated||{}).length : (player.bossesDefeated || 0);
-    const achCount = player.achievements?.unlocked?.length || 0;
-    const bar = (cur, max, len=10) => { const f = Math.round(Math.min(1, cur/max)*len); return '█'.repeat(f)+'░'.repeat(len-f); };
+    const power = calculatePowerRating(stats, Object.values(player.equipped || {}).filter(Boolean), player.pet);
+    const powerLabel = getPowerLabel(power);
 
-    const text =
-`╔═══════════════════════════╗
-  👤 ${player.name}'s PROFILE
-╚═══════════════════════════╝
-${className} | Lv.${lvl} | Rank ${player.rank||'F'}
+    const xpProgress = LevelUpManager.getXPProgress(player);
+    const xpBar = buildBar(xpProgress.current, xpProgress.needed, 10);
 
-❤️ HP  ${bar(stats.hp||0, stats.maxHp||100)} ${stats.hp||0}/${stats.maxHp||100}
-⚡ EN  ${bar(stats.energy||0, stats.maxEnergy||100)} ${stats.energy||0}/${stats.maxEnergy||100}
-✨ XP  ${bar(player.xp||0, xpNeeded)} ${(player.xp||0).toLocaleString()}/${xpNeeded.toLocaleString()} (${xpPct}% to Lv.${lvl+1})
+    const hpBar = buildBar(stats.hp || 0, stats.maxHp || 100, 10);
+    const energyBar = buildBar(stats.energy || 0, stats.maxEnergy || 100, 10);
 
-⚔️ ATK: ${(stats.atk||0) + (player.weapon?.bonus||0) + (ArtifactSystem?.getEquippedArtifactStats?.(player)?.atk||0)}  🛡️ DEF: ${(stats.def||0) + (ArtifactSystem?.getEquippedArtifactStats?.(player)?.def||0)}  💨 SPD: ${stats.speed||0}
-🗡️ Weapon: ${player.weapon?.name || 'None'}  💥 Crit: ${stats.critChance||5}%
+    const aura = player.aura || 0;
+    const auraTitle = AuraSystem.getAuraTitle(aura);
 
-💰 Gold: ${(player.gold||0).toLocaleString()}
-💎 Crystals: ${(player.manaCrystals||0).toLocaleString()}
+    const cls = player.class || null;
+    const evolvedClass = player.evolvedClass || null;
+    const classDisplay = evolvedClass ? `${evolvedClass} *(evolved)*` : cls ? cls : `*Not assigned yet*`;
 
-⚔️ PVP: ${pvpWins}W/${pvpLosses}L (${wr}%) | ELO: ${player.pvpElo||1000}
-👹 Bosses: ${bossKills} | 🏅 Achievements: ${achCount}
+    const gatesCleared = player.stats_history?.gatesCleared || 0;
+    const pvpWins = player.stats_history?.pvpWins || 0;
+    const pvpLosses = player.stats_history?.pvpLosses || 0;
+    const deaths = player.deathCount || 0;
 
-💡 /stats • /skills • /inventory`;
+    // Equipped gear summary
+    const equipped = player.equipped || {};
+    const gearLines = [];
+    const gearMap = {
+      weapon: '⚔️', armor: '🛡️', helmet: '⛑️', gloves: '🧤',
+      boots: '👟', accessory: '💍', artifact: '🔮', artifact2: '🔮'
+    };
+    for (const [slot, emoji] of Object.entries(gearMap)) {
+      const item = equipped[slot];
+      if (item) gearLines.push(`  ${emoji} ${item.name}`);
+    }
 
-    return sock.sendMessage(chatId, { text, mentions: [targetId] }, { quoted: msg });
+    const lines = [
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `👤 *${player.name}*`,
+      player.equippedTitle ? `🎖️ "${player.equippedTitle}"` : ``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      ``,
+      `${rankData.emoji} *Awakening Rank:* ${rankData.label}`,
+      `⭐ *Level:* ${player.level}`,
+      `⚡ *Power Rating:* ${power.toLocaleString()} ${powerLabel.emoji} ${powerLabel.label}`,
+      `🎭 *Class:* ${classDisplay}`,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `📊 *STATS*`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `❤️  HP:     ${stats.hp || 0}/${stats.maxHp || 0}`,
+      `    ${hpBar}`,
+      `💙  Energy: ${stats.energy || 0}/${stats.maxEnergy || 0}`,
+      `    ${energyBar}`,
+      `⚔️  ATK:    ${stats.atk || 0}`,
+      `🛡️  DEF:    ${stats.def || 0}`,
+      `💨  SPD:    ${stats.speed || 0}`,
+      `✨  Magic:  ${stats.magicPower || 0}`,
+      `💥  Crit:   ${stats.critChance || 0}% (×${((stats.critDamage || 150) / 100).toFixed(1)})`,
+      stats.lifesteal > 0 ? `💚  Steal:  ${stats.lifesteal}%` : ``,
+      ``,
+      `📈 *XP:* ${xpProgress.current.toLocaleString()} / ${xpProgress.needed.toLocaleString()} (${xpProgress.percent}%)`,
+      `    ${xpBar}`,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `✨ *AURA*`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `${auraTitle.emoji} ${auraTitle.title} — *${aura.toLocaleString()}* Aura`,
+      `⚔️ PvP: ${pvpWins}W / ${pvpLosses}L | Streak: ${player.pvpStreak || 0}`,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `📋 *RECORD*`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `🚪 Gates Cleared: ${gatesCleared}`,
+      `💀 Deaths: ${deaths}`,
+      `💎 Mana Stones: ${(player.manaCrystals || 0).toLocaleString()}`,
+      `📈 Upgrade Points: ${player.upgradePoints || 0}`,
+      ``,
+      gearLines.length > 0 ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━` : ``,
+      gearLines.length > 0 ? `🗡️ *EQUIPPED GEAR*` : ``,
+      gearLines.length > 0 ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━` : ``,
+      ...gearLines,
+      ``,
+      player.guild ? `🏰 Guild: *${player.guild}*` : `🏰 Guild: *None*`,
+      player.pet ? `🐾 Pet: *${player.pet.name || 'Unnamed'}* [Lv.${player.pet.level || 1}]` : `🐾 Pet: *None*`,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    ].filter(l => l !== null && l !== '').join('\n');
+
+    return sock.sendMessage(chatId, { text: lines }, { quoted: msg });
   }
 };
